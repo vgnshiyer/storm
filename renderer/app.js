@@ -283,6 +283,7 @@ function show(i) {
   document.body.classList.add('switching');
   active = i;
   cur = isStorm(tabs[i]) ? tabs[i] : null;
+  if (!cur) closeFind(false); // the settings page has nothing to find in
   document.body.classList.toggle('in-settings', !cur);
   renderTabs();
   renderList();
@@ -660,8 +661,134 @@ gripEl.addEventListener('pointerdown', (e) => {
 // ---------- editor ----------
 
 function renderTweets() {
+  locate(); // what Find is looking for, in the storm as it now stands
   tweetsEl.replaceChildren(...cur.tweets.map((_, i) => buildTweet(i)));
   syncHints();
+  syncFindBar();
+}
+
+/** Draws a tweet's words: the part past the limit in the warning colour, and anything Find
+    has matched on a tint, the match it is standing on a stronger one. */
+function paintBackdrop(backdrop, text, overAt, i) {
+  const mine = find.hits.filter((h) => h.tweet === i);
+  const cuts = new Set([0, text.length]);
+  if (overAt < text.length) cuts.add(overAt);
+  for (const h of mine) cuts.add(h.start).add(h.end);
+  const points = [...cuts].sort((a, b) => a - b);
+  const nodes = [];
+  for (let k = 0; k < points.length - 1; k++) {
+    const from = points[k];
+    const to = points[k + 1];
+    let node = from >= overAt ? el('mark', '', text.slice(from, to)) : text.slice(from, to);
+    const hit = mine.find((h) => from >= h.start && to <= h.end);
+    if (hit) {
+      const span = el('span', hit === find.hits[find.at] ? 'hit current' : 'hit');
+      span.append(node);
+      node = span;
+    }
+    nodes.push(node);
+  }
+  backdrop.replaceChildren(...nodes, '​');
+}
+
+// ---------- find: ⌘F looks for words in the open storm ----------
+
+const findEl = $('find');
+const findInput = $('find-input');
+const findCount = $('find-count');
+/** `hits` are the matches in reading order; `at` is the one Find is standing on (-1: none). */
+const find = { open: false, query: '', hits: [], at: -1 };
+let findBack = null; // what had the caret before, so closing can hand it back
+
+/** Works out the matches afresh, keeping Find's place in the list where it can. */
+function locate() {
+  const hits = [];
+  const q = find.query.toLowerCase();
+  if (find.open && q && cur) {
+    cur.tweets.forEach((text, tweet) => {
+      // Lower-casing can change a string's length in a few scripts; then match case as typed.
+      const low = text.toLowerCase();
+      const [hay, needle] = low.length === text.length ? [low, q] : [text, find.query];
+      for (let p = hay.indexOf(needle); p !== -1; p = hay.indexOf(needle, p + needle.length)) {
+        hits.push({ tweet, start: p, end: p + needle.length });
+      }
+    });
+  }
+  find.hits = hits;
+  find.at = hits.length ? Math.min(Math.max(find.at, 0), hits.length - 1) : -1;
+}
+
+function syncFindBar() {
+  const n = find.hits.length;
+  findCount.textContent = !find.query ? '' : n ? `${find.at + 1}/${n}` : 'No results';
+  $('find-prev').disabled = $('find-next').disabled = n < 2;
+}
+
+/** Looks again and redraws every tweet. With `reveal`, brings the current match into view. */
+function refreshFind(reveal) {
+  if (!cur) return;
+  locate();
+  [...tweetsEl.children].forEach((row, i) => refreshTweet(row, i));
+  syncFindBar();
+  if (reveal) tweetsEl.querySelector('.hit.current')?.scrollIntoView({ block: 'center' });
+}
+
+function stepFind(by) {
+  const n = find.hits.length;
+  if (!n) return;
+  find.at = (find.at + by + n) % n;
+  refreshFind(true);
+}
+
+function openFind() {
+  if (!cur) return; // nothing to look through on the settings page
+  if (!find.open) {
+    findBack = document.activeElement;
+    find.open = true;
+    findEl.hidden = false;
+    document.body.classList.add('finding');
+    find.query = findInput.value;
+    find.at = 0;
+    refreshFind(true);
+  }
+  findInput.focus();
+  findInput.select();
+}
+
+/** Puts the bar away. The caret goes to the match Find was standing on, with it selected,
+    or failing that back to where it was. */
+function closeFind(refocus = true) {
+  if (!find.open) return;
+  const last = find.hits[find.at];
+  find.open = false;
+  findEl.hidden = true;
+  document.body.classList.remove('finding');
+  refreshFind(false);
+  if (!refocus) return;
+  const ta = last && tweetsEl.children[last.tweet]?.querySelector('textarea');
+  if (ta) {
+    ta.focus();
+    ta.setSelectionRange(last.start, last.end);
+  } else if (findBack instanceof HTMLElement && findBack.isConnected) {
+    findBack.focus();
+  }
+}
+
+findInput.addEventListener('input', () => {
+  find.query = findInput.value;
+  find.at = 0;
+  refreshFind(true);
+});
+findInput.addEventListener('keydown', (e) => {
+  if (e.isComposing) return;
+  if (e.key === 'Enter') stepFind(e.shiftKey ? -1 : 1);
+  else if (e.key === 'Escape') closeFind();
+  else return;
+  e.preventDefault();
+});
+for (const [id, run] of [['find-prev', () => stepFind(-1)], ['find-next', () => stepFind(1)], ['find-close', () => closeFind()]]) {
+  $(id).addEventListener('mousedown', (e) => e.preventDefault()); // the field keeps its caret
+  $(id).addEventListener('click', run);
 }
 
 function buildTweet(i) {
@@ -686,7 +813,8 @@ function buildTweet(i) {
 
   ta.addEventListener('input', () => {
     cur.tweets[i] = ta.value;
-    refreshTweet(row, i);
+    if (find.open) refreshFind(false); // the matches move as the words do
+    else refreshTweet(row, i);
     touch();
   });
   ta.addEventListener('keydown', (e) => onKey(e, ta, i));
@@ -705,13 +833,7 @@ function refreshTweet(row, i) {
   const { count, overAt } = measure(text);
   const over = count > LIMIT;
 
-  const backdrop = row.querySelector('.backdrop');
-  if (over) {
-    const mark = el('mark', '', text.slice(overAt));
-    backdrop.replaceChildren(text.slice(0, overAt), mark, '​');
-  } else {
-    backdrop.replaceChildren(text, '​');
-  }
+  paintBackdrop(row.querySelector('.backdrop'), text, over ? overAt : Infinity, i);
 
   row.classList.toggle('over', over);
   row.querySelector('.count').textContent = String(count);
@@ -788,7 +910,10 @@ function onKey(e, ta, i) {
   const plain = !e.shiftKey && !e.metaKey && !e.altKey && !e.ctrlKey;
   const last = cur.tweets.length - 1;
 
-  if (e.key === 'Enter' && e.metaKey) {
+  if (e.key === 'Escape' && find.open) {
+    e.preventDefault();
+    closeFind();
+  } else if (e.key === 'Enter' && e.metaKey) {
     e.preventDefault();
     if (!isEmpty(cur)) splitTweet(ta, i); // like its button, it waits for the first words
   } else if (e.key === 'Backspace' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && i > 0) {
@@ -1072,6 +1197,7 @@ const MENU = {
   'previous-tab': () => cycleTab(-1),
   'toggle-sidebar': toggleSidebar,
   search: openSearch,
+  find: openFind,
   settings: openSettings,
 };
 window.api.onMenu((action) => MENU[action]?.());

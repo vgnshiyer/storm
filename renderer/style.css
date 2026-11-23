@@ -672,6 +672,110 @@ body.wall #shade {
   color: var(--danger);
 }
 
+/* Find: a small bar at the pane's top right, where the status line sits, which steps aside. */
+body.finding #status {
+  visibility: hidden;
+}
+
+#find {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 10px; /* the last button sits as far from the right edge as from the top and bottom */
+  border: 1px solid var(--outline);
+  border-radius: calc(12px * var(--round));
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--soft);
+  cursor: default;
+}
+
+#find[hidden] {
+  display: none;
+}
+
+#find > svg {
+  flex: none;
+  margin-right: 6px;
+}
+
+#find-input {
+  width: 168px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  caret-color: var(--accent);
+  font: inherit;
+  letter-spacing: inherit;
+  user-select: text;
+}
+
+#find-input::placeholder {
+  color: var(--muted);
+}
+
+#find-input::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+#find-count {
+  margin: 0 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
+}
+
+#find-count:empty {
+  display: none;
+}
+
+.find-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(8px * var(--round));
+  background: transparent;
+  color: var(--soft);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.find-btn svg {
+  display: block;
+}
+
+.find-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+  color: var(--text);
+}
+
+.find-btn:disabled {
+  color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* What Find has matched, and the match it is standing on. Only a tint: nothing that would
+   move the words. */
+.backdrop .hit {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.backdrop .hit.current {
+  background: color-mix(in srgb, var(--accent) 68%, transparent);
+}
+
 #scroll {
   position: relative;
   flex: 1;

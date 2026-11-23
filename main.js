@@ -199,7 +199,8 @@ app.whenReady().then(() => {
         label: 'View',
         submenu: [
           action('Toggle Sidebar', 'Cmd+B', 'toggle-sidebar'),
-          action('Search Storms', 'Shift+Cmd+F', 'search'), // ⌘F is kept free for finding within a storm
+          action('Find in Storm', 'Cmd+F', 'find'),
+          action('Search Storms', 'Shift+Cmd+F', 'search'),
           action('Show Next Tab', 'Ctrl+Tab', 'next-tab'),
           action('Show Previous Tab', 'Ctrl+Shift+Tab', 'previous-tab'),
           { type: 'separator' },
