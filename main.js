@@ -294,10 +294,31 @@ ipcMain.handle('ai:ask', (_e, key, request) =>
   cancellable(key, async (signal) => {
     const model = await aiModel();
     if (!model) return { ok: false, error: 'No AI is connected.' };
-    return { ok: true, text: await ai.ask(model.provider, request, { signal, model: model.id }) };
+    return { ok: true, text: await ai.ask(model.provider, request, { signal, model: model.id }), model: model.name };
   })
 );
 ipcMain.handle('ai:cancel', (_e, key) => asking.get(key)?.abort());
+
+// The last reply about each tweet is kept in the app's own data, apart from the storms'
+// files: asks.json holds { storm id: { tweet number: { question, reply, model } } }.
+const asksFile = () => path.join(app.getPath('userData'), 'asks.json');
+function readAsks() {
+  try {
+    const kept = JSON.parse(fs.readFileSync(asksFile(), 'utf8'));
+    return kept && typeof kept === 'object' && !Array.isArray(kept) ? kept : {};
+  } catch {
+    return {};
+  }
+}
+ipcMain.handle('asks:load', () => readAsks());
+/** Replaces what is kept for one storm; with nothing to keep, the storm is dropped from the file. */
+ipcMain.handle('asks:save', (_e, id, kept) => {
+  const all = readAsks();
+  if (kept && typeof kept === 'object' && Object.keys(kept).length) all[String(id)] = kept;
+  else delete all[String(id)];
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(asksFile(), JSON.stringify(all));
+});
 ipcMain.on('storms:saveSync', (e, id, text, mtime) => {
   try {
     save(id, text, mtime);
@@ -388,6 +409,8 @@ app.whenReady().then(() => {
           { role: 'pasteAndMatchStyle' },
           { role: 'delete' },
           { role: 'selectAll' },
+          { type: 'separator' },
+          action('Ask About This Tweet…', 'Cmd+K', 'ask'),
         ],
       },
       {

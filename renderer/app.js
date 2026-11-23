@@ -757,6 +757,7 @@ async function deleteStorm(s) {
     if (s.onDisk) await window.api.remove(s.id);
     s.onDisk = false;
     await window.api.trashMedia(s.id); // its images go to the Trash with it
+    window.api.saveAsks(s.id, null); // and what was said about its tweets is forgotten
   } catch {
     setStatus('error');
   }
@@ -930,6 +931,7 @@ for (const [id, back] of [['undo', true], ['redo', false]]) {
 
 function renderTweets() {
   locate(); // what Find is looking for, in the storm as it now stands
+  settleNotes();
   tweetsEl.replaceChildren(...cur.tweets.map((_, i) => buildTweet(i)));
   syncHints();
   syncFindBar();
@@ -1210,14 +1212,31 @@ function buildTweet(i) {
   });
 
   const gutter = el('div', 'gutter');
-  const copy = el('button', 'copy');
+  const copy = el('button', 'tool copy');
   copy.type = 'button';
   copy.dataset.tip = 'Copy tweet';
   copy.setAttribute('aria-label', 'Copy tweet');
   copy.append(icon(COPY_ICON, 14, 24));
   gutter.append(el('div', 'count'), el('div', 'excess'));
-  row.append(num, field, copy, gutter, el('div', 'media'));
+  // Ask: opens the question field under this tweet, or what was last said about it.
+  const ask = el('button', 'tool ask');
+  ask.type = 'button';
+  ask.dataset.tip = 'Ask';
+  ask.dataset.keys = '⌘K';
+  ask.setAttribute('aria-label', 'Ask about this tweet');
+  ask.append(icon(ASK_ICON, 14, 24));
+  ask.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it is
+  ask.addEventListener('click', () => {
+    hideTip();
+    openAsk(i);
+  });
+  const tools = el('div', 'tools');
+  tools.append(copy, ask);
+  row.append(num, field, tools, gutter, el('div', 'media'));
   renderMedia(row, i);
+  const note = cur.notes?.get(i);
+  ask.classList.toggle('kept', Boolean(note?.saved));
+  if (note?.open) row.append(buildNote(cur, note));
 
   // An image pasted into a tweet is attached to it.
   ta.addEventListener('paste', (e) => {
@@ -1233,6 +1252,7 @@ function buildTweet(i) {
   ta.addEventListener('input', (e) => {
     noteTyping(i, e.inputType);
     cur.tweets[i] = ta.value;
+    if (cur.shape) cur.shape[i] = ta.value; // see settleNotes
     if (find.open) refreshFind(false); // the matches move as the words do
     else refreshTweet(row, i);
     touch();
@@ -1406,6 +1426,11 @@ function moveTweet(from, to) {
   stopPosting(); // the order has changed under it
   cur.tweets.splice(to, 0, ...cur.tweets.splice(from, 1));
   cur.media.splice(to, 0, ...cur.media.splice(from, 1));
+  if (cur.notes?.size) {
+    cur.notes = new Map([...cur.notes].map(([at, note]) => [movedIndex(at, from, to), note]));
+    keepNotes(cur);
+  }
+  cur.shape = cur.tweets.slice(); // the replies have been moved by hand: nothing for settleNotes to work out
   renderTweets();
   if (selection) {
     const ta = tweetsEl.children[movedIndex(held, from, to)].querySelector('textarea');
@@ -1559,6 +1584,396 @@ $('scroll').addEventListener('mousedown', (e) => {
   if (post.on) return; // writing is paused while posting
   focusTweet(cur.tweets.length - 1, Infinity);
 });
+
+// ---------- asking: a second opinion on a tweet ----------
+// Each tweet has an Ask button beside Copy; ⌘K is the same button on the tweet the caret is
+// in. It opens a few ready questions and a field under the tweet. The question goes to the
+// connected model with the whole storm for context, and the reply sits under the tweet to be
+// read. It never changes a word of the storm: the writer takes what they like from it by hand.
+//
+// The last reply about a tweet is kept with it (in the app's own data, not the storm's file),
+// so opening Ask on that tweet again shows it without asking anything. Reset forgets it and
+// brings the questions back.
+
+/** The ready questions: what the button says, and what the model is asked. */
+const ASKS = [
+  { label: 'What do you think?', ask: 'What do you think?' },
+  { label: 'Critique it', ask: 'Critique it. What is weak, unclear or unconvincing here?' },
+  { label: 'Tighten it', ask: 'How could this say the same in fewer words?' },
+  { label: 'Check the flow', ask: 'Does this follow from the tweet before it, and lead into the one after?' },
+];
+const ASK_KEPT = 5; // how many typed questions are offered again
+const ASK_ICON = document.querySelector('section[data-section="ai"]').dataset.icon; // the Intelligence page's own mark
+const RESET_ICON = 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5';
+const CLOSE_ICON = 'M4 4l8 8M12 4l-8 8';
+
+const ASK_SYSTEM = [
+  'You are a second pair of eyes for someone writing a tweet storm (a thread for X) in a writing app.',
+  'They ask about one tweet at a time. They will read what you say and then edit the tweet themselves, taking what they like, so give your opinion rather than a finished rewrite.',
+  'Be direct and specific. Quote the exact words you mean, in double quotes. Say what works as well as what does not, and do not flatter.',
+  'Keep it short: three short paragraphs at most and under 90 words, unless the question needs more.',
+  'Write plain text: no markdown, no headings, no lists, no emoji.',
+  'If you offer another wording, put it on a line of its own that starts with "> ", and offer two at most. A tweet holds 280 characters.',
+  'The rest of the storm is there for context. Comment on the other tweets only if the question is about them, and call one "tweet 6", not "[6]".',
+].join('\n');
+
+/** What the model is sent: the storm as numbered tweets, which one is meant, and the question. */
+function askRequest(s, i, question) {
+  const tweets = s.tweets.map((text, k) => {
+    const images = s.media[k].length ? `\n(${s.media[k].length === 1 ? 'an image is' : `${s.media[k].length} images are`} attached)` : '';
+    return `[${k + 1}]\n${text.trim() || '(nothing written yet)'}${images}`;
+  });
+  const named = s.name ? `The storm is called "${s.name}". Its tweets:` : 'The storm, tweet by tweet:';
+  const about = `The question is about tweet [${i + 1}] (${measure(s.tweets[i]).count} of ${LIMIT} characters).`;
+  return { system: ASK_SYSTEM, prompt: `${named}\n\n${tweets.join('\n\n')}\n\n${about}\n\nQuestion: ${question}` };
+}
+
+/** The questions typed before, newest first. */
+function pastAsks() {
+  try {
+    const kept = JSON.parse(localStorage.getItem('asks'));
+    return Array.isArray(kept) ? kept.filter((q) => typeof q === 'string' && q && !ASKS.some((a) => a.label === q)).slice(0, ASK_KEPT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function keepAsk(question) {
+  if (ASKS.some((a) => a.label === question)) return;
+  localStorage.setItem('asks', JSON.stringify([question, ...pastAsks().filter((q) => q !== question)].slice(0, ASK_KEPT)));
+}
+
+// A tweet's note is `{ saved, open, phase, … }`: `saved` is the last reply about it
+// (`{ question, reply, model }`), which outlives the note being closed and the app being quit;
+// `phase` is what an open note shows: 'asking', 'waiting', 'done', 'failed' or 'unconnected'.
+
+/** Gives each storm the replies kept from earlier: `{ storm id: { tweet number: saved } }`. */
+function loadNotes(kept) {
+  for (const s of storms) {
+    const mine = Object.entries(kept?.[s.id] ?? {}).filter(([at, r]) => Number(at) < s.tweets.length && typeof r?.reply === 'string' && r.reply);
+    if (mine.length) s.notes = new Map(mine.map(([at, r]) => [Number(at), { saved: { question: String(r.question || ''), reply: r.reply, model: String(r.model || '') }, open: false, phase: 'done' }]));
+  }
+}
+
+/** Writes down a storm's kept replies, by tweet number. */
+function keepNotes(s) {
+  const kept = [...(s.notes ?? [])].filter(([, note]) => note.saved).map(([at, note]) => [at, note.saved]);
+  window.api.saveAsks(s.id, kept.length ? Object.fromEntries(kept) : null);
+}
+
+/** Notes are held by tweet number. When tweets come and go (a split, a merge, a deletion, an
+    undo), each note is moved to where its tweet now stands: the storm is compared with how it
+    stood at the last redraw, and whatever lies past the change shifts with it. A note whose
+    tweet is gone goes with it. */
+function settleNotes() {
+  const was = cur.shape;
+  const now = cur.tweets;
+  cur.shape = now.slice();
+  if (!cur.notes?.size || !was) return;
+  let head = 0;
+  while (head < was.length && head < now.length && was[head] === now[head]) head++;
+  let tail = 0;
+  while (tail < was.length - head && tail < now.length - head && was[was.length - 1 - tail] === now[now.length - 1 - tail]) tail++;
+  const changed = now.length - head - tail; // how many tweets now stand where the changed ones stood
+  const settled = new Map();
+  let moved = false;
+  for (const [at, note] of cur.notes) {
+    const to = at < head ? at : at >= was.length - tail ? at + now.length - was.length : changed ? head + Math.min(at - head, changed - 1) : -1;
+    if (to !== at) moved = true;
+    if (to >= 0 && !settled.has(to)) settled.set(to, note);
+    else if (note.key) window.api.cancelAsk(note.key);
+  }
+  cur.notes = settled;
+  if (moved) keepNotes(cur);
+}
+
+const noteAt = (s, note) => [...(s.notes ?? [])].find(([, n]) => n === note)?.[0] ?? -1;
+
+/** Redraws tweet `i`'s note, and its Ask button, which stays in view while a reply is kept.
+    `fresh` lets the note fade in: it is new, or has changed what it is. A note with nothing
+    kept and nothing showing is let go. */
+function paintNote(s, i, fresh = false) {
+  const note = s.notes?.get(i);
+  if (note && !note.open && !note.saved) s.notes.delete(i);
+  const row = s === cur && tweetsEl.children[i];
+  if (!row) return null;
+  row.querySelector(':scope > .note')?.remove();
+  row.querySelector('.ask').classList.toggle('kept', Boolean(note?.saved));
+  if (!note?.open) return null;
+  const box = buildNote(s, note);
+  if (fresh) box.classList.add('fresh');
+  row.append(box);
+  box.scrollIntoView({ block: 'nearest' });
+  return box;
+}
+
+/** The caret goes back into the note's tweet, where it was when Ask was opened. */
+function backToTweet(s, note, i = noteAt(s, note)) {
+  const ta = s === cur && tweetsEl.children[i]?.querySelector('textarea');
+  if (!ta) return;
+  ta.focus({ preventScroll: true });
+  if (note.caret) ta.setSelectionRange(...note.caret.map((at) => Math.min(at, ta.value.length)));
+}
+
+/** A tweet's Ask button, or ⌘K for the tweet the caret is in (or whose question field it is
+    in). It opens the tweet's note and, pressed again, closes it. A tweet with a reply kept
+    opens on that reply and nothing is asked: asking again is what Reset is for. Any other
+    tweet opens on the questions. */
+async function openAsk(at) {
+  if (!cur || post.on || isEmpty(cur)) return;
+  const s = cur;
+  const asking = document.activeElement?.classList.contains('ask-input') ? document.activeElement.closest('.tweet') : null;
+  const i = Number.isInteger(at) ? at : asking ? [...tweetsEl.children].indexOf(asking) : targetTweet().i;
+  const ta = tweetsEl.children[i]?.querySelector('textarea');
+  if (!ta) return;
+  s.notes ??= new Map();
+  const note = s.notes.get(i) ?? { saved: null, open: false, phase: 'asking' };
+  if (note.open) {
+    if (note.phase !== 'waiting') closeNote(s, note, Boolean(tweetsEl.children[i].querySelector('.note')?.contains(document.activeElement)));
+    return;
+  }
+  s.notes.set(i, note);
+  note.caret = document.activeElement === ta ? [ta.selectionStart, ta.selectionEnd] : null;
+  if (note.saved) {
+    Object.assign(note, { open: true, phase: 'done' });
+    paintNote(s, i, true);
+    return;
+  }
+  Object.assign(note, { open: true, phase: 'asking', typed: '', picked: -1 });
+  paintNote(s, i, true)?.querySelector('.ask-input').focus();
+  // Asking needs a connection. The field is up at once; if it turns out there is none, it says so.
+  const view = await window.api.aiList();
+  if (view.model || !note.open || note.phase !== 'asking' || noteAt(s, note) < 0) return;
+  note.phase = 'unconnected';
+  paintNote(s, noteAt(s, note), true);
+  backToTweet(s, note);
+}
+
+/** Closes a note, calling off a question that is still out. What is kept stays kept. */
+function closeNote(s, note, refocus = false) {
+  const i = noteAt(s, note);
+  if (i < 0) return;
+  if (note.key) window.api.cancelAsk(note.key);
+  note.key = null;
+  Object.assign(note, { open: false, phase: note.saved ? 'done' : 'asking' });
+  paintNote(s, i, true);
+  if (refocus) backToTweet(s, note, i);
+}
+
+/** Reset: forgets the reply kept for this tweet and opens the questions again. */
+function resetNote(s, note) {
+  const i = noteAt(s, note);
+  if (i < 0) return;
+  Object.assign(note, { saved: null, phase: 'asking', typed: '', picked: -1 });
+  keepNotes(s);
+  paintNote(s, i, true)?.querySelector('.ask-input').focus();
+}
+
+/** Sends a question: `label` is how it is shown, `ask` what the model is asked. The caret
+    goes back to the tweet, so writing carries on while it is away. The reply, when it comes,
+    is kept for the tweet in place of the one before. */
+async function sendAsk(s, note, label, ask = label) {
+  const key = `ask-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  Object.assign(note, { phase: 'waiting', question: label, ask, key, error: '' });
+  keepAsk(label);
+  paintNote(s, noteAt(s, note), true);
+  backToTweet(s, note);
+  const done = await window.api.ask(key, askRequest(s, noteAt(s, note), ask));
+  if (done.cancelled || note.key !== key || noteAt(s, note) < 0) return; // called off, or its tweet is gone
+  note.key = null;
+  if (done.ok) {
+    Object.assign(note, { phase: 'done', saved: { question: label, reply: done.text, model: done.model || '' } });
+    keepNotes(s);
+  } else {
+    Object.assign(note, { phase: 'failed', error: done.error });
+  }
+  paintNote(s, noteAt(s, note), true);
+}
+
+/** The reply as it is read: paragraphs, and any wording the model offered ("> …") set apart in
+    a block of its own with a button to copy it. Words in double quotes are the model pointing
+    at the writer's own, so they are drawn brighter. Stray markdown is taken as plain words. */
+function replyBlocks(text) {
+  const blocks = [];
+  const lines = text
+    .replace(/\*\*|__|`/g, '')
+    .split('\n')
+    .map((line) => line.trim().replace(/^#+\s+/, '').replace(/^[-*]\s+/, '• '));
+  let open = null; // the paragraph or offered wording being gathered
+  for (const line of lines) {
+    const offered = line.startsWith('>');
+    const words = offered ? line.replace(/^>\s*/, '') : line;
+    if (!words) open = null;
+    else if (open && open.offered === offered) open.lines.push(words);
+    else blocks.push((open = { offered, lines: [words] }));
+  }
+  return blocks.map(({ offered, lines }) => {
+    if (!offered) {
+      const p = el('p');
+      p.append(...lines.join('\n').split(/([“"][^“”"\n]{2,}[”"])/).map((part, k) => (k % 2 ? el('em', '', part) : part)));
+      return p;
+    }
+    const wording = lines.join('\n').replace(/^[“"]([^“”"]*)[”"]$/, '$1');
+    const block = el('div', 'offered');
+    const copy = el('button', 'note-btn');
+    copy.type = 'button';
+    copy.dataset.tip = 'Copy';
+    copy.setAttribute('aria-label', 'Copy this wording');
+    copy.append(icon(COPY_ICON, 14, 24));
+    copy.addEventListener('click', async () => {
+      await window.api.copy(wording);
+      copy.replaceChildren(icon(CHECK_ICON, 14, 24));
+      setTimeout(() => copy.replaceChildren(icon(COPY_ICON, 14, 24)), 1200);
+    });
+    block.append(el('div', '', wording), copy);
+    return block;
+  });
+}
+
+/** A small button in a note: an icon, what it is called, what it does. */
+function noteButton(glyph, box, name, run) {
+  const button = el('button', 'note-btn');
+  button.type = 'button';
+  button.setAttribute('aria-label', name);
+  button.dataset.tip = name;
+  button.append(icon(glyph, 14, box));
+  button.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays in the tweet
+  button.addEventListener('click', () => {
+    hideTip();
+    run();
+  });
+  return button;
+}
+
+/** Draws a note as it now stands: the questions, the wait, the reply, or what went wrong. */
+function buildNote(s, note) {
+  const box = el('div', 'note is-' + note.phase);
+  if (note.phase === 'asking') return buildAsk(s, note, box);
+  const close = noteButton(CLOSE_ICON, 16, note.phase === 'waiting' ? 'Cancel' : 'Close', () => closeNote(s, note));
+
+  if (note.phase === 'unconnected') {
+    const connect = el('button', 'btn', 'Connect…');
+    connect.type = 'button';
+    connect.addEventListener('click', () => {
+      closeNote(s, note);
+      sectionId = 'ai';
+      localStorage.setItem('settings-section', sectionId);
+      openSettings();
+    });
+    const acts = el('div', 'note-acts');
+    acts.append(close);
+    const line = el('div', 'note-line');
+    line.append(el('span', '', 'Asking needs Claude or ChatGPT connected.'), connect, acts);
+    box.append(line);
+    return box;
+  }
+
+  // The top line: what was asked, which model answered, and the buttons.
+  const done = note.phase === 'done';
+  const acts = el('div', 'note-acts');
+  if (done) acts.append(noteButton(RESET_ICON, 24, 'Reset', () => resetNote(s, note)));
+  acts.append(close);
+  const head = el('div', 'note-head');
+  head.append(el('span', 'note-ask', done ? note.saved.question : note.question), el('span', 'note-model', done ? note.saved.model.toLowerCase() : ''), acts);
+  box.append(head);
+  if (note.phase === 'waiting') {
+    const line = el('div', 'note-line');
+    line.append(aiWaiting(), el('span', '', 'Waiting for a reply…'));
+    box.append(line);
+  } else if (note.phase === 'failed') {
+    const again = el('button', 'btn', 'Try again');
+    again.type = 'button';
+    again.addEventListener('click', () => sendAsk(s, note, note.question, note.ask));
+    const line = el('div', 'note-line');
+    line.append(el('span', 'error', note.error || 'No reply came back.'), again);
+    box.append(line);
+  } else {
+    const reply = el('div', 'note-reply');
+    reply.append(...replyBlocks(note.saved.reply));
+    box.append(reply);
+  }
+  return box;
+}
+
+/** The questions: the ready ones as buttons, a field for any other, and under it the ones
+    typed before. Return sends what is typed; with nothing typed it presses the first button,
+    which is drawn as the one Return will take. The arrows move through the earlier questions. */
+function buildAsk(s, note, box) {
+  const ready = el('div', 'ask-ready');
+  ready.append(
+    ...ASKS.map((a) => {
+      const button = el('button', 'ask-chip', a.label);
+      button.type = 'button';
+      button.addEventListener('click', () => sendAsk(s, note, a.label, a.ask));
+      return button;
+    })
+  );
+  const field = el('label', 'ask-field');
+  const input = el('input', 'ask-input');
+  input.type = 'text';
+  input.spellcheck = false;
+  input.placeholder = 'Ask about this tweet';
+  input.setAttribute('aria-label', 'Ask about this tweet');
+  input.value = note.typed || '';
+  field.append(input, el('span', 'keys', '↵'));
+  const list = el('div', 'ask-list');
+  // The ready questions share their row with the way out.
+  const acts = el('div', 'note-acts');
+  acts.append(noteButton(CLOSE_ICON, 16, 'Close', () => closeNote(s, note, true)));
+  const top = el('div', 'ask-top');
+  top.append(ready, acts);
+  box.append(top, field, list);
+
+  let shown = [];
+  const draw = () => {
+    const typed = input.value.trim().toLowerCase();
+    shown = pastAsks().filter((q) => !typed || (q.toLowerCase().includes(typed) && q.toLowerCase() !== typed));
+    note.picked = Math.max(-1, Math.min(note.picked ?? -1, shown.length - 1));
+    ready.firstChild.classList.toggle('picked', !typed && note.picked < 0);
+    list.replaceChildren(
+      ...shown.map((q, k) => {
+        const item = el('button', 'ask-item' + (k === note.picked ? ' picked' : ''), q);
+        item.type = 'button';
+        item.tabIndex = -1;
+        item.addEventListener('click', () => sendAsk(s, note, q));
+        return item;
+      })
+    );
+    list.hidden = !shown.length;
+  };
+  draw();
+
+  // A click on a button or an earlier question leaves the field its caret.
+  ready.addEventListener('mousedown', (e) => e.preventDefault());
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  input.addEventListener('input', () => {
+    note.typed = input.value;
+    note.picked = -1; // typed words are the question until the arrows say otherwise
+    draw();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeNote(s, note, true);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const typed = input.value.trim();
+      if (note.picked >= 0) sendAsk(s, note, shown[note.picked]);
+      else if (typed) sendAsk(s, note, typed);
+      else sendAsk(s, note, ASKS[0].label, ASKS[0].ask);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      note.picked = Math.max(-1, Math.min(note.picked + (e.key === 'ArrowDown' ? 1 : -1), shown.length - 1));
+      draw();
+    }
+  });
+  // Going back to the storm puts unasked questions away. Leaving the window does not.
+  box.addEventListener('focusout', (e) => {
+    if (note.open && note.phase === 'asking' && e.relatedTarget && !box.contains(e.relatedTarget)) closeNote(s, note);
+  });
+  return box;
+}
 
 // ---------- wallpaper ----------
 // The wallpaper is the backdrop of a storm that hasn't been started. The first character
@@ -2042,6 +2457,7 @@ const MENU = {
   search: openSearch,
   find: openFind,
   post: startPosting,
+  ask: () => openAsk(),
   // In a tweet, Undo and Redo step through the storm's history; in any other field
   // (search, find, a name being typed) they are that field's own.
   undo: () => (cur && !(document.activeElement instanceof HTMLInputElement) ? stepHistory(true) : document.execCommand('undo')),
@@ -2057,6 +2473,7 @@ setInterval(renderList, 60e3);
 
   const files = await window.api.list();
   storms = files.map((f) => ({ id: f.id, ...parse(f.text), mtime: f.mtime, onDisk: true }));
+  loadNotes(await window.api.loadAsks());
   // Images no storm points to any more are cleared out now, before any Undo could want them back.
   window.api.sweepMedia(Object.fromEntries(storms.map((s) => [s.id, s.media.flat()])));
 

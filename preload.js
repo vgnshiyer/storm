@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('api', {
   aiPage: (id) => ipcRenderer.invoke('ai:page', id),
   ask: (key, request) => ipcRenderer.invoke('ai:ask', key, request),
   cancelAsk: (key) => ipcRenderer.invoke('ai:cancel', key),
+  loadAsks: () => ipcRenderer.invoke('asks:load'),
+  saveAsks: (id, kept) => ipcRenderer.invoke('asks:save', id, kept),
   openComposer: (text) => ipcRenderer.invoke('post:open', text),
   onMenu: (fn) => ipcRenderer.on('menu', (_e, action) => fn(action)),
 });
