@@ -736,7 +736,9 @@ function onKey(e, ta, i) {
   if (e.key === 'Enter' && e.metaKey) {
     e.preventDefault();
     if (!isEmpty(cur)) splitTweet(ta, i); // like its button, it waits for the first words
-  } else if (e.key === 'Backspace' && plain && collapsed && ta.selectionStart === 0 && i > 0) {
+  } else if (e.key === 'Backspace' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && i > 0) {
+    // Like its button, it joins this tweet to the one above wherever the caret is. In the first
+    // tweet there is nothing above, so the key keeps its usual job of deleting to the line's start.
     e.preventDefault();
     mergeUp(i);
   } else if (e.key === 'ArrowUp' && plain && collapsed && i > 0 && caretLine(ta).first) {
