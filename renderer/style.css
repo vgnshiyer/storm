@@ -591,6 +591,8 @@ body.collapsed main {
 #wallpaper-preview-dither {
   container-type: size;
   overflow: hidden;
+  /* A little see-through, so the pane colour quietens the image. */
+  opacity: 0.75;
 }
 
 .wall-fx,
