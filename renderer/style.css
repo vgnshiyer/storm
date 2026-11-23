@@ -797,8 +797,10 @@ body.finding #status {
 /* Over the wallpaper the page is a solid sheet of the pane colour. */
 /* It is only as big as an empty storm needs, and opens out to the full page as you start. */
 body.wall #editor {
-  max-width: 524px;
-  padding: 6px 52px 20px; /* the extra width goes equally to both sides */
+  max-width: 482px;
+  /* No number is shown on a new storm, so the left side gives up its column: the words start
+     as far from the left edge as the buttons end from the right. */
+  padding: 6px 52px 20px 13px;
   border-color: var(--outline);
   background: var(--bg);
 }
@@ -823,8 +825,9 @@ body.wall .tweet > .gutter {
   padding: 12px 16px 22px 58px;
 }
 
-.tweet::before {
-  content: counter(tweet);
+/* The tweet's number. It is also a handle: drag it to move the tweet up or down the storm. */
+.tweet > .num {
+  transition: opacity 0.25s ease, background-color 0.12s ease, color 0.12s ease;
   position: absolute;
   top: 11px;
   left: 16px;
@@ -836,6 +839,60 @@ body.wall .tweet > .gutter {
   background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--soft);
   font: 12px/1 var(--font-mono);
+}
+
+.tweet > .num::before {
+  content: counter(tweet);
+}
+
+/* With more than one tweet the number can be picked up. */
+.tweet:not(:only-child) > .num {
+  cursor: grab;
+}
+
+.tweet:not(:only-child) > .num:hover,
+.tweet.dragging > .num {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  color: var(--text);
+}
+
+/* ---------- dragging tabs and tweets into a new order ---------- */
+
+body.sorting,
+body.sorting * {
+  cursor: grabbing !important;
+}
+
+/* The others slide aside to show where the dragged one will land; it follows the pointer and,
+   on release, settles into its place. */
+.sorting > * {
+  transition: transform 0.18s ease;
+}
+
+.sorting > .dragging {
+  position: relative;
+  z-index: 2;
+  transition: none;
+}
+
+.sorting > .dragging.settling {
+  transition: transform 0.16s ease;
+}
+
+/* A tweet in hand is a card lifted off the page; the rail between tweets steps back until
+   it is put down. */
+.tweet.dragging {
+  border-radius: calc(12px * var(--round));
+  background: color-mix(in srgb, var(--text) 6%, var(--bg));
+  box-shadow: 0 0 0 1px var(--outline);
+}
+
+.tweet::after {
+  transition: opacity 0.15s ease;
+}
+
+#tweets.sorting .tweet::after {
+  opacity: 0;
 }
 
 .tweet:not(:last-child)::after {
@@ -920,6 +977,13 @@ textarea.text::placeholder {
 }
 
 /* The right column: each tweet's character count, level with its first line. */
+/* A storm with nothing written shows no tweet number: the page is just the invitation to
+   start. The number fades in with the first character, as the count does. */
+#editor.blank .tweet > .num {
+  opacity: 0;
+  pointer-events: none;
+}
+
 #editor.blank .gutter {
   opacity: 0;
 }
@@ -1300,34 +1364,19 @@ body.in-settings #scroll {
 
 .preview-page {
   position: relative;
-  width: min(430px, 78%);
+  width: fit-content;
+  max-width: 92%;
   margin: 38px auto 0;
-  padding: 12px 14px 14px;
+  padding: 16px 46px 17px; /* the new-storm page at about five-sixths: words, then its buttons */
   border-radius: calc(14px * var(--round));
   background: var(--bg);
 }
 
-.preview-tweet {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.preview-chip {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: calc(8px * var(--round));
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-  color: var(--soft);
-  font: 11px/1 var(--font-mono);
-}
-
 .preview-text {
-  flex: 1;
+  display: block;
   color: var(--muted);
+  font-size: calc(12.5px * var(--fs));
+  line-height: 20px;
 }
 
 
@@ -1335,7 +1384,7 @@ body.in-settings #scroll {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin: 12px 0 0 34px;
+  margin: 26px 0 0;
 }
 
 /* The real pills at about five-sixths of their size. */

@@ -242,6 +242,117 @@ window.addEventListener('beforeunload', () => {
 
 // ---------- tabs ----------
 
+// ---------- dragging things into a new order ----------
+
+const SORT_SLOP = 4; // px the pointer must travel before a press becomes a drag
+const SORT_EDGE = 56; // px from the scroller's top or bottom where a drag starts to scroll it
+
+/** Lets `item` be dragged to a new place among its siblings, along a row ('x') or a column
+    ('y'). The others slide aside to show where it will land; on release it settles there and
+    `onDrop(from, to)` is told. A press that never travels is left alone, so clicks still work.
+    With a `scroller`, holding the drag near its top or bottom edge scrolls it. */
+function startSort(e, item, { axis, scroller, onDrop }) {
+  const list = [...item.parentElement.children];
+  const from = list.indexOf(item);
+  if (e.button !== 0 || list.length < 2) return;
+  const across = axis === 'x';
+  const rects = list.map((el) => el.getBoundingClientRect());
+  const lead = (r) => (across ? r.left : r.top);
+  const size = (r) => (across ? r.width : r.height);
+  const gap = lead(rects[1]) - lead(rects[0]) - size(rects[0]);
+  const move = (d) => (d ? (across ? `translateX(${d}px)` : `translateY(${d}px)`) : '');
+  const least = lead(rects[0]) - lead(rects[from]);
+  const most = lead(rects.at(-1)) + size(rects.at(-1)) - lead(rects[from]) - size(rects[from]);
+  const start = across ? e.clientX : e.clientY;
+  const scrolled = scroller ? scroller.scrollTop : 0;
+  let pointer = start;
+  let to = from;
+  let dragging = false;
+  let frame = 0;
+
+  /** How far the dragged item sits from its slot once it has landed at `to`. */
+  const landing = () => {
+    let d = 0;
+    for (let j = from + 1; j <= to; j++) d += size(rects[j]) + gap;
+    for (let j = to; j < from; j++) d -= size(rects[j]) + gap;
+    return d;
+  };
+
+  const place = () => {
+    const d = Math.max(least, Math.min(most, pointer - start + (scroller ? scroller.scrollTop - scrolled : 0)));
+    item.style.transform = move(d);
+    const head = lead(rects[from]) + d;
+    const tail = head + size(rects[from]);
+    to = from;
+    for (let j = from + 1; j < list.length; j++) if (tail > lead(rects[j]) + size(rects[j]) / 2) to = j;
+    for (let j = from - 1; j >= 0; j--) if (head < lead(rects[j]) + size(rects[j]) / 2) to = j;
+    const room = size(rects[from]) + gap;
+    list.forEach((el, j) => {
+      if (j !== from) el.style.transform = move(j > from && j <= to ? -room : j < from && j >= to ? room : 0);
+    });
+  };
+
+  // Near the scroller's top or bottom edge the page creeps along, faster the closer the pointer is.
+  const creep = () => {
+    frame = 0;
+    if (!dragging) return;
+    const box = scroller.getBoundingClientRect();
+    const over = Math.max(0, pointer - (box.bottom - SORT_EDGE)) - Math.max(0, box.top + SORT_EDGE - pointer);
+    if (over) {
+      scroller.scrollTop += Math.max(-16, Math.min(16, over / 4));
+      place();
+    }
+    frame = requestAnimationFrame(creep);
+  };
+
+  const onMove = (ev) => {
+    pointer = across ? ev.clientX : ev.clientY;
+    if (!dragging) {
+      if (Math.abs(pointer - start) < SORT_SLOP) return;
+      dragging = true;
+      hideTip();
+      document.body.classList.add('sorting');
+      item.parentElement.classList.add('sorting');
+      item.classList.add('dragging');
+      if (scroller) frame = requestAnimationFrame(creep);
+    }
+    place();
+  };
+
+  const finish = () => {
+    item.removeEventListener('pointermove', onMove);
+    item.removeEventListener('pointerup', finish);
+    item.removeEventListener('pointercancel', finish);
+    cancelAnimationFrame(frame);
+    if (!dragging) return;
+    dragging = false;
+    // The press ends as a drop, not as a click on whatever is under the pointer.
+    const swallow = (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 80);
+    item.classList.add('settling');
+    item.style.transform = move(landing());
+    setTimeout(() => {
+      for (const el of list) el.style.transform = '';
+      item.classList.remove('dragging', 'settling');
+      item.parentElement.classList.remove('sorting');
+      document.body.classList.remove('sorting');
+      if (to !== from) onDrop(from, to);
+    }, 170);
+  };
+
+  item.setPointerCapture(e.pointerId);
+  item.addEventListener('pointermove', onMove);
+  item.addEventListener('pointerup', finish);
+  item.addEventListener('pointercancel', finish);
+}
+
+/** Where index `i` ends up once the item at `from` has been moved to `to`. */
+const movedIndex = (i, from, to) => (i === from ? to : i > from && i <= to ? i - 1 : i < from && i >= to ? i + 1 : i);
+
 function saveTabs() {
   localStorage.setItem('tabs', JSON.stringify({ ids: tabs.map((s) => s.id), active }));
 }
@@ -268,6 +379,19 @@ function renderTabs() {
       tab.addEventListener('click', (e) => {
         if (close.contains(e.target)) closeTab(i);
         else show(i);
+      });
+      // Tabs can be dragged along the bar into a new order.
+      tab.addEventListener('pointerdown', (e) => {
+        if (close.contains(e.target)) return;
+        startSort(e, tab, {
+          axis: 'x',
+          onDrop: (from, to) => {
+            tabs.splice(to, 0, ...tabs.splice(from, 1));
+            active = movedIndex(active, from, to);
+            renderTabs();
+            saveTabs();
+          },
+        });
       });
       return tab;
     })
@@ -802,6 +926,15 @@ function buildTweet(i) {
   ta.value = cur.tweets[i];
   field.append(backdrop, ta);
 
+  // The tweet's number, drawn by the style sheet's counter. It is also the handle the tweet
+  // is dragged by, up or down the storm.
+  const num = el('div', 'num');
+  num.setAttribute('aria-hidden', 'true');
+  num.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it is
+  num.addEventListener('pointerdown', (e) => {
+    startSort(e, row, { axis: 'y', scroller: $('scroll'), onDrop: moveTweet });
+  });
+
   const gutter = el('div', 'gutter');
   const copy = el('button', 'copy');
   copy.type = 'button';
@@ -809,7 +942,7 @@ function buildTweet(i) {
   copy.setAttribute('aria-label', 'Copy tweet');
   copy.append(icon(COPY_ICON, 14, 24));
   gutter.append(el('div', 'count'), el('div', 'excess'));
-  row.append(field, copy, gutter);
+  row.append(num, field, copy, gutter);
 
   ta.addEventListener('input', () => {
     cur.tweets[i] = ta.value;
@@ -839,6 +972,21 @@ function refreshTweet(row, i) {
   row.querySelector('.count').textContent = String(count);
   row.querySelector('.excess').textContent = over ? `${count - LIMIT} over` : '';
   row.querySelector('.copy').hidden = !text.trim();
+}
+
+/** Moves a tweet to a new place in the storm, keeping the caret in the tweet it was in. */
+function moveTweet(from, to) {
+  const areas = [...tweetsEl.querySelectorAll('textarea')];
+  const held = areas.indexOf(document.activeElement);
+  const selection = held >= 0 ? [areas[held].selectionStart, areas[held].selectionEnd] : null;
+  cur.tweets.splice(to, 0, ...cur.tweets.splice(from, 1));
+  renderTweets();
+  if (selection) {
+    const ta = tweetsEl.children[movedIndex(held, from, to)].querySelector('textarea');
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(...selection);
+  }
+  touch();
 }
 
 function focusTweet(i, pos) {
@@ -1174,6 +1322,7 @@ document.addEventListener('mouseover', (e) => {
   let target = e.target.closest('[data-tip]');
   if (target && (target.disabled || target.classList.contains('off'))) target = null; // nothing to explain on a control that is off
   if (target && document.querySelector(':popover-open')) target = null; // a menu is open: a tooltip would sit across it
+  if (document.body.classList.contains('sorting')) target = null; // something is being dragged into place
   if (target === tipFor) return;
   hideTip();
   if (!target) return;
