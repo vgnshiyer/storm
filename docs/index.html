@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Storm · A thread writer for Mac</title>
+    <meta name="description" content="Storm is a quiet Mac app for writing threads before you post them. One thought per tweet, plain files, no account." />
+    <meta property="og:title" content="Storm · The calm before" />
+    <meta property="og:description" content="A quiet Mac app for writing threads before you post them." />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="img/favicon.png" />
+    <link rel="preload" href="fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav id="index" aria-label="Sections">
+      <a class="word home" href="#top" aria-label="Storm"><i>s</i><i>t</i><i>o</i><i>r</i><i>m</i></a>
+      <ol>
+        <li><a href="#why"><span>01</span>Why</a></li>
+        <li><a href="#write"><span>02</span>Write</a></li>
+        <li><a href="#post"><span>03</span>Post</a></li>
+        <li><a href="#files"><span>04</span>Files</a></li>
+        <li><a href="#look"><span>05</span>Look</a></li>
+        <li><a href="#keys"><span>06</span>Keys</a></li>
+      </ol>
+    </nav>
+
+    <main id="top">
+      <header class="hero">
+        <h1 class="word calm" id="hero-word" aria-label="Storm"><i>s</i><i>t</i><i>o</i><i>r</i><i>m</i></h1>
+        <p class="line">The calm before.</p>
+        <p class="sub">A quiet Mac app for writing threads before you post them.</p>
+        <p class="cta">
+          <a class="btn" href="https://x.com/vgnshiyer">Follow the build on X</a>
+          <span class="mono">for mac · not released yet</span>
+        </p>
+      </header>
+
+      <section id="why" class="chapter">
+        <p class="label"><span>01</span>Why</p>
+        <h2>You write worse with the audience in the room.</h2>
+        <p class="lead">The composer on X sits inside the feed, so every draft is written with the timeline looking on. Storm is somewhere else to write: an empty page, and nothing on it but your thread.</p>
+        <figure class="shot">
+          <img src="img/storm-new.png" width="2200" height="1440" alt="A new, empty storm in the Storm app: one field that says Start typing, over a photograph of clouds." />
+          <figcaption>A new storm. Nothing written yet.</figcaption>
+        </figure>
+        <div class="grid three">
+          <div class="tile note"><b>Quiet</b><p>No feed, no replies, no numbers going up. A column of tweets and a count for each.</p></div>
+          <div class="tile note"><b>Yours</b><p>Every storm is a plain text file on your Mac. No account, nothing to sign in to.</p></div>
+          <div class="tile note"><b>Quick</b><p>Everything has a shortcut. Your hands stay on the keys from the first word to the last paste.</p></div>
+        </div>
+      </section>
+
+      <section id="write" class="chapter">
+        <p class="label"><span>02</span>Write</p>
+        <h2>One thought per tweet.</h2>
+        <p class="lead">A storm is a column of tweets. Each has its number on the left and its character count on the right, so you see the shape of the whole thread while you write it.</p>
+        <figure class="shot">
+          <img src="img/storm-dark.png" width="2200" height="1440" alt="A thread about a book, written in Storm: two numbered tweets, an image on the first, a character count beside each." loading="lazy" />
+          <figcaption>A thread in Storm. Counts are on the right: 110 and 249.</figcaption>
+        </figure>
+        <div class="grid three">
+          <div class="tile note"><b>Split and merge</b><p>⌘↵ starts a new tweet where the cursor is. ⌘⌫ joins a tweet back onto the one above.</p></div>
+          <div class="tile note"><b>Reorder</b><p>Drag a tweet by its number to move it. Undo and redo are kept for each storm.</p></div>
+          <div class="tile note"><b>Images</b><p>Drop or paste up to four images on a tweet, and drag them into the order you want.</p></div>
+          <div class="tile note"><b>280</b><p>Storm counts the way X counts, and marks the first character that goes over.</p></div>
+          <div class="tile note"><b>Tabs</b><p>Keep several storms open side by side in tabs, and drag the tabs into order.</p></div>
+          <div class="tile note"><b>Find</b><p>⌘F finds a word in the storm you are in. ⇧⌘F searches every storm you have.</p></div>
+        </div>
+      </section>
+
+      <section id="post" class="chapter">
+        <p class="label"><span>03</span>Post</p>
+        <h2>Post without losing your place.</h2>
+        <p class="lead">Storm opens X with your first tweet already in the box. After that, Return copies the next tweet or image for you to paste, and Storm ticks off what is done.</p>
+        <figure class="shot">
+          <img src="img/storm-posting.png" width="2200" height="1440" alt="Posting from Storm: the image on tweet one is outlined as the next thing to paste, and the bottom row reads Copy next, Stop, 1/2, image 1/1." loading="lazy" />
+          <figcaption>Posting. The outlined image is the next thing to paste.</figcaption>
+        </figure>
+        <div class="grid two">
+          <div class="tile note"><b>You press Post on X</b><p>Storm never posts for you. It hands you each piece in order and you paste it.</p></div>
+          <div class="tile note"><b>No login</b><p>Storm never asks for your X password or an API key. There is nothing to connect.</p></div>
+        </div>
+      </section>
+
+      <section id="files" class="chapter">
+        <p class="label"><span>04</span>Files</p>
+        <h2>Plain files. No account.</h2>
+        <p class="lead">Every storm is a Markdown file in your Documents folder. Open it in any editor, back it up however you like, and keep it whether or not you keep Storm.</p>
+        <div class="tile file">
+          <p class="mono">~/Documents/Storms/2026-11-01-171002.md</p>
+          <pre># Book of Elon
+
+Read @EricJorgenson's Book of Elon. Absolutely loved it! Here are my notes, insights, learnings from it.
+
+![](2026-11-01-171002/book.jpg)
+
+---
+
+1/ Be Useful
+
+the measure of success in life is not how famous you are. it’s how many useful things you have done.</pre>
+        </div>
+        <p class="aside mono">the thread above, as it is saved · a line of three dashes separates two tweets</p>
+      </section>
+
+      <section id="look" class="chapter">
+        <p class="label"><span>05</span>Look</p>
+        <h2>Dark, light, or your own.</h2>
+        <p class="lead">Six themes, each in light and dark. Choose a picture and it sits behind every new storm until you start writing.</p>
+        <div class="grid two">
+          <figure class="shot light">
+            <img src="img/storm-light.png" width="2200" height="1440" alt="The same thread in Storm's light mode." loading="lazy" />
+            <figcaption>The Storm theme in light mode.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="img/storm-themes.png" width="2200" height="1440" alt="Storm's appearance settings: light, dark or automatic, and six themes." loading="lazy" />
+            <figcaption>Storm, X, Catppuccin, Gruvbox, Everforest and One.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="keys" class="chapter">
+        <p class="label"><span>06</span>Keys</p>
+        <h2>Stay on the keyboard.</h2>
+        <p class="lead">Everything Storm does has a shortcut. These are all of them.</p>
+        <div class="grid two">
+          <dl class="tile lines keys">
+            <div><dt>New tweet</dt><dd>⌘↵</dd></div>
+            <div><dt>Merge up</dt><dd>⌘⌫</dd></div>
+            <div><dt>Delete tweet</dt><dd>⇧⌘⌫</dd></div>
+            <div><dt>Post to X</dt><dd>⇧⌘↵</dd></div>
+            <div><dt>Undo</dt><dd>⌘Z</dd></div>
+            <div><dt>Redo</dt><dd>⇧⌘Z</dd></div>
+          </dl>
+          <dl class="tile lines keys">
+            <div><dt>New storm</dt><dd>⌘N</dd></div>
+            <div><dt>New tab</dt><dd>⌘T</dd></div>
+            <div><dt>Find in storm</dt><dd>⌘F</dd></div>
+            <div><dt>Search storms</dt><dd>⇧⌘F</dd></div>
+            <div><dt>Sidebar</dt><dd>⌘B</dd></div>
+            <div><dt>Settings</dt><dd>⌘P</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="closing">
+        <span class="word" aria-hidden="true"><i>s</i><i>t</i><i>o</i><i>r</i><i>m</i></span>
+        <p class="line">Write here. Post when it is ready.</p>
+        <p class="cta">
+          <a class="btn" href="https://x.com/vgnshiyer">Follow the build on X</a>
+          <span class="mono">for mac · not released yet</span>
+        </p>
+      </section>
+
+      <footer>
+        <p>Storm, a thread writer for Mac.</p>
+        <p class="mono">by <a href="https://x.com/vgnshiyer">@vgnshiyer</a></p>
+      </footer>
+    </main>
+
+    <script src="page.js"></script>
+  </body>
+</html>
