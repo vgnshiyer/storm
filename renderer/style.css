@@ -658,11 +658,19 @@ body.wall #shade {
   opacity: 1;
 }
 
-#status {
+/* The pane's top right: the status line. */
+#pane-right {
   position: absolute;
-  top: 13px;
-  right: 18px;
+  top: 8px;
+  right: 10px;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+}
+
+#status {
   color: var(--muted);
   font-family: var(--font-mono); /* like the counts beside each tweet */
   font-size: calc(12px * var(--fs));
@@ -672,12 +680,32 @@ body.wall #shade {
   color: var(--danger);
 }
 
+/* Undo and Redo: at the pane's top left, opposite the status line. They act on the storm
+   in the pane, so they live in it and not in the window's bar. */
+#history {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+}
+
+#history[hidden] {
+  display: none;
+}
+
+#history .pane-btn {
+  width: 26px;
+  height: 26px;
+}
+
 /* Find: a small bar at the pane's top right, where the status line sits, which steps aside. */
-body.finding #status {
+body.finding #pane-right {
   visibility: hidden;
 }
 
-#find {
+.pane-bar {
   position: absolute;
   top: 8px;
   right: 10px;
@@ -694,11 +722,11 @@ body.finding #status {
   cursor: default;
 }
 
-#find[hidden] {
+.pane-bar[hidden] {
   display: none;
 }
 
-#find > svg {
+.pane-bar > svg {
   flex: none;
   margin-right: 6px;
 }
@@ -738,7 +766,7 @@ body.finding #status {
   display: none;
 }
 
-.find-btn {
+.pane-btn {
   flex: none;
   display: grid;
   place-items: center;
@@ -752,17 +780,42 @@ body.finding #status {
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.find-btn svg {
+.pane-btn svg {
   display: block;
 }
 
-.find-btn:not(:disabled):hover {
+.pane-btn:not(:disabled):hover {
   background: color-mix(in srgb, var(--text) 11%, transparent);
   color: var(--text);
 }
 
-.find-btn:disabled {
+.pane-btn:disabled {
   color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* A tweet already handed over steps back and wears a tick for its number; the one on the
+   clipboard now is picked out in the accent colour. */
+.tweet > .field,
+.tweet > .gutter {
+  transition: opacity 0.2s ease;
+}
+
+.tweet.posted > .field,
+.tweet.posted > .gutter {
+  opacity: 0.4;
+}
+
+.tweet.posted > .num::before {
+  content: none;
+}
+
+.tweet > .num svg {
+  display: block;
+}
+
+.tweet.posting-now > .num {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text);
 }
 
 /* What Find has matched, and the match it is standing on. Only a tint: nothing that would
@@ -797,7 +850,7 @@ body.finding #status {
 /* Over the wallpaper the page is a solid sheet of the pane colour. */
 /* It is only as big as an empty storm needs, and opens out to the full page as you start. */
 body.wall #editor {
-  max-width: 482px;
+  max-width: 459px;
   /* No number is shown on a new storm, so the left side gives up its column: the words start
      as far from the left edge as the buttons end from the right. */
   padding: 6px 52px 20px 13px;
@@ -1093,6 +1146,72 @@ textarea.text::placeholder {
   color: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
+/* Posting: the row turns into its controls (Copy next, Stop, and how far along it is) and
+   holds to the bottom of the pane, so they stay in reach while the storm scrolls above. */
+body:not(.posting) #hints .posting-only,
+body.posting #hints .pill:not(.posting-only) {
+  display: none;
+}
+
+body.posting #hints {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  /* as wide as a tweet's row, and solid, so words passing underneath do not show through */
+  margin: 0 -16px -24px;
+  padding: 10px 16px 14px 58px; /* the buttons sit exactly where the ordinary row's do */
+  background: var(--bg);
+}
+
+/* Above the row the words fade out rather than being cut off. */
+body.posting #hints::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 18px;
+  background: linear-gradient(to top, var(--bg), transparent);
+  pointer-events: none;
+}
+
+#hints #post-next {
+  color: var(--text);
+}
+
+#hints #post-next:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+}
+
+#post-count {
+  align-self: center;
+  margin-left: 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--fs));
+}
+
+/* Writing is paused while posting: the words take no clicks, a tweet cannot be picked up by
+   its number, and Undo and Redo are put away. Copy on each tweet still works. */
+body.posting #scroll {
+  cursor: default;
+}
+
+body.posting .tweet > .field,
+body.posting .tweet > .num {
+  pointer-events: none;
+}
+
+body.posting #history {
+  display: none;
+}
+
+/* A tweet brought into view stops clear of the row. */
+body.posting .tweet {
+  scroll-margin-bottom: 72px;
+}
+
 /* Tooltip: a pill in the pane colour, set apart by an outline. The one place the app draws a
    border around a surface, so the tooltip never melts into what is behind it. */
 #tip {
@@ -1313,6 +1432,15 @@ body.in-settings #scroll {
 .btn:disabled {
   background: color-mix(in srgb, var(--text) 4%, transparent);
   color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+/* A button that takes something away, such as the wallpaper's Remove. */
+.btn.danger:not(:disabled) {
+  color: var(--danger);
+}
+
+.btn.danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
 .btn.icon {

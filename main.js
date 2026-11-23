@@ -114,7 +114,14 @@ async function chooseWallpaper() {
 ipcMain.handle('storms:list', () => list());
 ipcMain.handle('storms:save', (_e, id, text, mtime) => save(id, text, mtime));
 ipcMain.handle('storms:remove', (_e, id) => remove(id));
-ipcMain.handle('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
+// A test run leaves the Mac's clipboard and browser alone: it only notes what it would have done.
+ipcMain.handle('clipboard:write', (_e, text) => (headless ? console.log('COPY ' + JSON.stringify(String(text))) : clipboard.writeText(String(text))));
+// Posting: one tweet is handed to X's own composer in the browser. Nothing is posted until
+// the Post button is pressed there.
+ipcMain.handle('post:open', (_e, text) => {
+  const url = 'https://x.com/intent/post?text=' + encodeURIComponent(String(text));
+  return headless ? console.log('OPEN ' + url) : shell.openExternal(url);
+});
 ipcMain.handle('wallpaper:get', () => wallpaper());
 ipcMain.handle('wallpaper:choose', () => chooseWallpaper());
 ipcMain.handle('wallpaper:clear', () => setWallpaper({ kind: 'none' }));
@@ -192,9 +199,24 @@ app.whenReady().then(() => {
       },
       {
         label: 'File',
-        submenu: [action('New Storm', 'Cmd+N', 'new-storm'), action('New Tab', 'Cmd+T', 'open-tab'), { type: 'separator' }, action('Close Tab', 'Cmd+W', 'close-tab')],
+        submenu: [action('New Storm', 'Cmd+N', 'new-storm'), action('New Tab', 'Cmd+T', 'open-tab'), { type: 'separator' }, action('Post to X…', 'Shift+Cmd+Enter', 'post'), { type: 'separator' }, action('Close Tab', 'Cmd+W', 'close-tab')],
       },
-      { role: 'editMenu' },
+      {
+        label: 'Edit',
+        // Undo and Redo go to the window, which steps through the storm's own history
+        // (splits, merges, deletions and moves included), not just one field's typing.
+        submenu: [
+          action('Undo', 'Cmd+Z', 'undo'),
+          action('Redo', 'Shift+Cmd+Z', 'redo'),
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+        ],
+      },
       {
         label: 'View',
         submenu: [

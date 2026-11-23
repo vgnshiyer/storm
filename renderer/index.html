@@ -50,14 +50,20 @@
         <div id="wall-dither"></div>
       </div>
       <div id="shade"></div>
-      <span id="status"></span>
-      <div id="find" role="search" hidden>
+      <div id="pane-right">
+        <span id="status"></span>
+      </div>
+      <div id="history" hidden>
+        <button id="undo" class="pane-btn" data-tip="Undo" data-keys="⌘Z" aria-label="Undo" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg></button>
+        <button id="redo" class="pane-btn" data-tip="Redo" data-keys="⇧⌘Z" aria-label="Redo" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg></button>
+      </div>
+      <div id="find" class="pane-bar" role="search" hidden>
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM21 21l-4.3-4.3" /></svg>
         <input id="find-input" type="text" placeholder="Find in storm" aria-label="Find in storm" spellcheck="false" />
         <span id="find-count"></span>
-        <button id="find-prev" class="find-btn" data-tip="Previous" data-keys="⇧↵" aria-label="Previous match"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg></button>
-        <button id="find-next" class="find-btn" data-tip="Next" data-keys="↵" aria-label="Next match"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
-        <button id="find-close" class="find-btn" data-tip="Close" data-keys="esc" aria-label="Close find"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+        <button id="find-prev" class="pane-btn" data-tip="Previous" data-keys="⇧↵" aria-label="Previous match"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg></button>
+        <button id="find-next" class="pane-btn" data-tip="Next" data-keys="↵" aria-label="Next match"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
+        <button id="find-close" class="pane-btn" data-tip="Close" data-keys="esc" aria-label="Close find"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
       </div>
       <div id="scroll">
         <div id="editor">
@@ -65,7 +71,10 @@
           <div id="hints">
             <button class="pill" data-act="new-tweet">New tweet <span class="keys">⌘↵</span></button>
             <button class="pill" data-act="merge-up">Merge up <span class="keys">⌘⌫</span></button>
-            <button class="pill" data-act="new-storm">New storm <span class="keys">⌘N</span></button>
+            <button class="pill" data-act="post">Post <span class="keys">⇧⌘↵</span></button>
+            <button id="post-next" class="pill posting-only" data-act="post-next"><span id="post-next-label">Copy next</span> <span class="keys">↵</span></button>
+            <button class="pill posting-only" data-act="post-stop">Stop <span class="keys">esc</span></button>
+            <span id="post-count" class="posting-only"></span>
           </div>
         </div>
       </div>
@@ -95,7 +104,7 @@
                 </div>
                 <div class="row-actions">
                   <button id="wallpaper-choose" class="btn icon" data-tip="Choose image" aria-label="Choose image"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 5h6M19 2v6M21 11.5v5a4.5 4.5 0 0 1-4.5 4.5h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3h5M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6.2 20.8M11 9a2 2 0 1 1 -4 0 2 2 0 0 1 4 0z" /></svg></button>
-                  <button id="wallpaper-none" class="btn icon" data-tip="Remove image" aria-label="Remove image" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6M14 11v6M19 6v13a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6M3 6h18M8 6V5a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v1" /></svg></button>
+                  <button id="wallpaper-none" class="btn icon danger" data-tip="Remove image" aria-label="Remove image" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6M14 11v6M19 6v13a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6M3 6h18M8 6V5a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v1" /></svg></button>
                 </div>
               </div>
               <div class="settings-row">
@@ -109,11 +118,11 @@
                 <div id="wallpaper-preview-dither"></div>
                 <div class="preview-shade"></div>
                 <div class="preview-page">
-                  <span class="preview-text">Start your storm</span>
+                  <span class="preview-text">Start your storm…</span>
                   <div class="preview-pills">
                     <span class="pill">New tweet <span class="keys">⌘↵</span></span>
                     <span class="pill">Merge up <span class="keys">⌘⌫</span></span>
-                    <span class="pill">New storm <span class="keys">⌘N</span></span>
+                    <span class="pill">Post <span class="keys">⇧⌘↵</span></span>
                   </div>
                 </div>
               </div>

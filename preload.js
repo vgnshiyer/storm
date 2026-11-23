@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('api', {
   wallpaper: () => ipcRenderer.invoke('wallpaper:get'),
   chooseWallpaper: () => ipcRenderer.invoke('wallpaper:choose'),
   clearWallpaper: () => ipcRenderer.invoke('wallpaper:clear'),
+  openComposer: (text) => ipcRenderer.invoke('post:open', text),
   onMenu: (fn) => ipcRenderer.on('menu', (_e, action) => fn(action)),
 });

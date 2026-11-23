@@ -202,6 +202,7 @@ function touch() {
   else tab.querySelector('.tab-title').textContent = titleOf(cur);
   updateWall();
   syncHints();
+  syncHistory();
 }
 
 /** Puts a storm on disk as it stands now, or takes its file away if there is nothing to keep. */
@@ -407,6 +408,7 @@ function show(i) {
   document.body.classList.add('switching');
   active = i;
   cur = isStorm(tabs[i]) ? tabs[i] : null;
+  stopPosting(); // posting belongs to the storm that was on screen
   if (!cur) closeFind(false); // the settings page has nothing to find in
   document.body.classList.toggle('in-settings', !cur);
   renderTabs();
@@ -414,6 +416,7 @@ function show(i) {
   if (cur) renderTweets();
   else renderSettings();
   setStatus('saved');
+  syncHistory();
   updateWall();
   if (cur) focusTweet(cur.tweets.length - 1, Infinity);
   saveTabs();
@@ -784,11 +787,114 @@ gripEl.addEventListener('pointerdown', (e) => {
 
 // ---------- editor ----------
 
+// ---------- undo and redo ----------
+// Each storm keeps its own history while the app is open: the tweets as they stood before
+// each change, with where the caret was. A run of typing counts as one change.
+
+const HISTORY_MAX = 200;
+const TYPING_PAUSE = 1000; // ms without a keystroke that ends a run of typing
+/** @type {WeakMap<Storm, {undo: object[], redo: object[]}>} */
+const histories = new WeakMap();
+let typing = { at: 0, tweet: -1, kind: '' };
+let beforeEdit = null; // the storm as it stood just before the keystroke now being handled
+
+function historyOf(s) {
+  if (!histories.has(s)) histories.set(s, { undo: [], redo: [] });
+  return histories.get(s);
+}
+
+function caretNow() {
+  const areas = [...tweetsEl.querySelectorAll('textarea')];
+  const i = areas.indexOf(document.activeElement);
+  return i < 0 ? null : { i, start: areas[i].selectionStart, end: areas[i].selectionEnd };
+}
+
+const snapshot = () => ({ tweets: cur.tweets.slice(), caret: caretNow() });
+
+/** Call just before changing the open storm, so the change can be undone. */
+function remember(snap = snapshot()) {
+  const h = historyOf(cur);
+  h.undo.push(snap);
+  if (h.undo.length > HISTORY_MAX) h.undo.shift();
+  h.redo.length = 0;
+  typing.at = 0; // whatever comes next starts a new run
+  syncHistory();
+}
+
+/** Typing is remembered a run at a time: a new run starts after a pause, in another tweet,
+    when typing turns to deleting or back, and for anything pasted, cut or dropped. */
+function noteTyping(i, inputType = '') {
+  const kind = inputType.startsWith('delete') ? 'delete' : /^insert(Composition)?Text$/.test(inputType) ? 'type' : 'other';
+  const now = Date.now();
+  if (kind === 'other' || kind !== typing.kind || i !== typing.tweet || now - typing.at > TYPING_PAUSE) {
+    remember(beforeEdit ?? { tweets: cur.tweets.slice(), caret: null });
+  }
+  typing = { at: now, tweet: i, kind };
+  beforeEdit = null;
+}
+
+/** Where the caret belongs after words in one tweet have changed: at the end of what changed.
+    Null when the change was to the tweets themselves (one added, removed or moved). */
+function caretAfter(before, after) {
+  if (before.length !== after.length) return null;
+  const changed = after.flatMap((text, i) => (text === before[i] ? [] : [i]));
+  if (changed.length !== 1) return null;
+  const [was, now] = [before[changed[0]], after[changed[0]]];
+  // Whatever the two share at the end was not touched; the change stops just before it.
+  const short = Math.min(was.length, now.length);
+  let tail = 0;
+  while (tail < short && was[was.length - 1 - tail] === now[now.length - 1 - tail]) tail++;
+  return { i: changed[0], start: now.length - tail, end: now.length - tail };
+}
+
+/** Undo (`back`) or redo: swaps the storm for the one remembered. Undo puts the caret back
+    where it was before the change; redo puts it at the end of what came back. */
+function stepHistory(back) {
+  if (!cur || post.on) return; // nothing changes while posting
+  const h = historyOf(cur);
+  const [from, into] = back ? [h.undo, h.redo] : [h.redo, h.undo];
+  const snap = from.pop();
+  if (!snap) return;
+  into.push(snapshot());
+  const caret = (!back && caretAfter(cur.tweets, snap.tweets)) || snap.caret;
+  cur.tweets = snap.tweets.slice();
+  typing.at = 0;
+  renderTweets();
+  const ta = caret && tweetsEl.children[caret.i]?.querySelector('textarea');
+  if (ta) {
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(caret.start, caret.end);
+    ta.closest('.tweet').scrollIntoView({ block: 'nearest' });
+  } else {
+    focusTweet(cur.tweets.length - 1, Infinity);
+  }
+  touch();
+}
+
+/** The Undo and Redo buttons: off when there is nothing to step to, and out of sight on a
+    storm that has never had a word in it. */
+function syncHistory() {
+  const h = cur ? historyOf(cur) : { undo: [], redo: [] };
+  $('undo').disabled = !h.undo.length;
+  $('redo').disabled = !h.redo.length;
+  $('history').hidden = !cur || (!h.undo.length && !h.redo.length && isEmpty(cur));
+}
+
+for (const [id, back] of [['undo', true], ['redo', false]]) {
+  $(id).addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it is
+  $(id).addEventListener('click', () => {
+    hideTip();
+    stepHistory(back);
+  });
+}
+
 function renderTweets() {
   locate(); // what Find is looking for, in the storm as it now stands
   tweetsEl.replaceChildren(...cur.tweets.map((_, i) => buildTweet(i)));
   syncHints();
   syncFindBar();
+  if (post.on && post.size !== cur.tweets.length) stopPosting(); // a tweet came or went: the ticks no longer hold
+  else markPosting();
 }
 
 /** Draws a tweet's words: the part past the limit in the warning colour, and anything Find
@@ -814,6 +920,98 @@ function paintBackdrop(backdrop, text, overAt, i) {
   }
   backdrop.replaceChildren(...nodes, '​');
 }
+
+// ---------- posting: hands the storm to X a tweet at a time ----------
+// The row of buttons under the storm becomes the posting controls while this is going on,
+// and writing is paused: the storm cannot be changed until posting is done or stopped.
+// The first tweet opens in X's own composer; after that each press of Copy next puts the
+// following tweet on the clipboard, to paste as the next post of the thread. Tweets already
+// handed over are ticked, and the one on the clipboard now is picked out, so it is always
+// plain which was pasted last.
+
+/** `order` lists the tweets that have words, by index; `at` is the place in it of the tweet
+    in hand; `done` holds the places already handed over. */
+const post = { on: false, order: [], at: -1, done: new Set(), size: 0 };
+
+function markPosting() {
+  [...tweetsEl.children].forEach((row, i) => {
+    const place = post.on ? post.order.indexOf(i) : -1;
+    const done = place >= 0 && post.done.has(place);
+    row.classList.toggle('posted', done);
+    row.classList.toggle('posting-now', place >= 0 && place === post.at);
+    const num = row.querySelector('.num');
+    if (done && !num.firstChild) num.append(icon(CHECK_ICON, 12, 24));
+    else if (!done) num.replaceChildren();
+    // Writing is paused while posting: the words can be read and copied, not changed.
+    const ta = row.querySelector('textarea');
+    ta.readOnly = post.on;
+    ta.tabIndex = post.on ? -1 : 0;
+  });
+  if (!post.on) return;
+  const last = post.at >= post.order.length - 1;
+  $('post-count').textContent = `${post.done.size + 1}/${post.order.length}`;
+  $('post-next-label').textContent = last ? 'Done' : 'Copy next';
+}
+
+/** Takes up the tweet at `place` in the order: the one before it is ticked off. */
+function handOver(place) {
+  if (post.at >= 0 && post.at !== place) post.done.add(post.at);
+  post.done.delete(place);
+  post.at = place;
+  markPosting();
+  tweetsEl.children[post.order[place]]?.scrollIntoView({ block: 'nearest' });
+}
+
+async function startPosting() {
+  if (!cur || isEmpty(cur) || post.on) return;
+  closeFind(false);
+  post.on = true;
+  post.order = cur.tweets.flatMap((text, i) => (text.trim() ? [i] : []));
+  post.size = cur.tweets.length;
+  post.done = new Set();
+  post.at = -1;
+  document.body.classList.add('posting');
+  handOver(0);
+  $('post-next').focus();
+  await window.api.openComposer(cur.tweets[post.order[0]].trim());
+  if (post.on && post.order.length > 1) copyNext(); // the second is ready to paste as soon as X is open
+}
+
+/** Puts the following tweet on the clipboard, or ends once the last one has gone. */
+async function copyNext() {
+  if (!post.on) return;
+  if (post.at >= post.order.length - 1) return stopPosting();
+  const place = post.at + 1;
+  await window.api.copy(cur.tweets[post.order[place]].trim());
+  if (post.on) handOver(place);
+}
+
+function stopPosting() {
+  if (!post.on) return;
+  post.on = false;
+  post.at = -1;
+  post.done = new Set();
+  document.body.classList.remove('posting');
+  markPosting();
+  // Writing picks up again at the end of the storm, unless the caret is in some other field.
+  if (cur && !(document.activeElement instanceof HTMLInputElement)) focusTweet(cur.tweets.length - 1, Infinity);
+}
+
+// While posting, Return copies the next tweet and Escape stops, wherever in the window the
+// last click landed. Other fields (search, a name being typed) keep their own keys.
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (!post.on || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.target instanceof HTMLInputElement) return;
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Enter') copyNext();
+    else stopPosting();
+  },
+  true
+);
+
 
 // ---------- find: ⌘F looks for words in the open storm ----------
 
@@ -866,6 +1064,7 @@ function stepFind(by) {
 
 function openFind() {
   if (!cur) return; // nothing to look through on the settings page
+  stopPosting(); // the two bars share a corner
   if (!find.open) {
     findBack = document.activeElement;
     find.open = true;
@@ -922,7 +1121,7 @@ function buildTweet(i) {
   const ta = el('textarea', 'text');
   ta.rows = 1;
   ta.spellcheck = true;
-  ta.placeholder = i === 0 ? 'Start your storm' : 'Keep writing';
+  ta.placeholder = i === 0 ? 'Start your storm…' : 'Keep writing…';
   ta.value = cur.tweets[i];
   field.append(backdrop, ta);
 
@@ -944,7 +1143,11 @@ function buildTweet(i) {
   gutter.append(el('div', 'count'), el('div', 'excess'));
   row.append(num, field, copy, gutter);
 
-  ta.addEventListener('input', () => {
+  ta.addEventListener('beforeinput', () => {
+    beforeEdit = snapshot();
+  });
+  ta.addEventListener('input', (e) => {
+    noteTyping(i, e.inputType);
     cur.tweets[i] = ta.value;
     if (find.open) refreshFind(false); // the matches move as the words do
     else refreshTweet(row, i);
@@ -953,6 +1156,7 @@ function buildTweet(i) {
   ta.addEventListener('keydown', (e) => onKey(e, ta, i));
   copy.addEventListener('click', async () => {
     await window.api.copy(cur.tweets[i].trim());
+    if (post.on && post.order.includes(i)) handOver(post.order.indexOf(i)); // copied by hand: posting carries on from here
     copy.replaceChildren(icon(CHECK_ICON, 14, 24)); // a tick, for a moment, to say it worked
     setTimeout(() => copy.replaceChildren(icon(COPY_ICON, 14, 24)), 1200);
   });
@@ -974,11 +1178,23 @@ function refreshTweet(row, i) {
   row.querySelector('.copy').hidden = !text.trim();
 }
 
+/** Takes a tweet out of the storm and leaves the caret at the end of the one before it. */
+function deleteTweet(i) {
+  if (cur.tweets.length < 2) return;
+  remember();
+  cur.tweets.splice(i, 1);
+  renderTweets();
+  focusTweet(Math.max(0, i - 1), Infinity);
+  touch();
+}
+
 /** Moves a tweet to a new place in the storm, keeping the caret in the tweet it was in. */
 function moveTweet(from, to) {
   const areas = [...tweetsEl.querySelectorAll('textarea')];
   const held = areas.indexOf(document.activeElement);
   const selection = held >= 0 ? [areas[held].selectionStart, areas[held].selectionEnd] : null;
+  remember();
+  stopPosting(); // the order has changed under it
   cur.tweets.splice(to, 0, ...cur.tweets.splice(from, 1));
   renderTweets();
   if (selection) {
@@ -1012,6 +1228,7 @@ function caretLine(ta) {
 }
 
 function splitTweet(ta, i) {
+  remember();
   const text = ta.value;
   cur.tweets.splice(i, 1, text.slice(0, ta.selectionStart).trimEnd(), text.slice(ta.selectionEnd).trimStart());
   renderTweets();
@@ -1043,6 +1260,7 @@ function unfold(row) {
 }
 
 function mergeUp(i) {
+  remember();
   const a = cur.tweets[i - 1];
   const b = cur.tweets[i];
   const joiner = a && b && !/\s$/.test(a) && !/^\s/.test(b) ? ' ' : '';
@@ -1061,9 +1279,13 @@ function onKey(e, ta, i) {
   if (e.key === 'Escape' && find.open) {
     e.preventDefault();
     closeFind();
-  } else if (e.key === 'Enter' && e.metaKey) {
+  } else if (e.key === 'Enter' && e.metaKey && !e.shiftKey) {
     e.preventDefault();
     if (!isEmpty(cur)) splitTweet(ta, i); // like its button, it waits for the first words
+  } else if (e.key === 'Backspace' && e.metaKey && e.shiftKey && !e.altKey && !e.ctrlKey && last > 0) {
+    // ⇧⌘⌫ deletes the tweet the caret is in. The only tweet is the storm itself, so it stays.
+    e.preventDefault();
+    deleteTweet(i);
   } else if (e.key === 'Backspace' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && i > 0) {
     // Like its button, it joins this tweet to the one above wherever the caret is. In the first
     // tweet there is nothing above, so the key keeps its usual job of deleting to the line's start.
@@ -1109,7 +1331,9 @@ hintsEl.addEventListener('click', (e) => {
   const button = e.target.closest('.pill');
   if (!button || button.classList.contains('off') || !cur) return;
   const { ta, i, focused } = targetTweet();
-  if (button.dataset.act === 'new-storm') return newStorm();
+  if (button.dataset.act === 'post') return startPosting();
+  if (button.dataset.act === 'post-next') return copyNext();
+  if (button.dataset.act === 'post-stop') return stopPosting();
   if (button.dataset.act === 'merge-up') return mergeUp(i);
   if (!focused) focusTweet(i, Infinity);
   splitTweet(ta, i);
@@ -1120,6 +1344,7 @@ tweetsEl.addEventListener('focusin', syncHints);
 $('scroll').addEventListener('mousedown', (e) => {
   if (e.target.closest('.tweet') || e.target.closest('#hints') || !cur) return;
   e.preventDefault();
+  if (post.on) return; // writing is paused while posting
   focusTweet(cur.tweets.length - 1, Infinity);
 });
 
@@ -1347,6 +1572,11 @@ const MENU = {
   'toggle-sidebar': toggleSidebar,
   search: openSearch,
   find: openFind,
+  post: startPosting,
+  // In a tweet, Undo and Redo step through the storm's history; in any other field
+  // (search, find, a name being typed) they are that field's own.
+  undo: () => (cur && !(document.activeElement instanceof HTMLInputElement) ? stepHistory(true) : document.execCommand('undo')),
+  redo: () => (cur && !(document.activeElement instanceof HTMLInputElement) ? stepHistory(false) : document.execCommand('redo')),
   settings: openSettings,
 };
 window.api.onMenu((action) => MENU[action]?.());
