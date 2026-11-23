@@ -6,9 +6,11 @@
   "description": "Write and keep tweet storms",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "package": "electron-packager . Storm --platform=darwin --arch=arm64 --icon=assets/icon.icns --app-bundle-id=me.vgnshiyer.storm --out=dist --overwrite --ignore='^/design' --ignore='^/dist' && codesign --force --deep --sign - dist/Storm-darwin-arm64/Storm.app"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "electron": "^45.4.1"
   },
   "dependencies": {
