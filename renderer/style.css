@@ -1,0 +1,1404 @@
+:root {
+  /* Theme colours. themes.js sets these eight; everything below is derived from them. */
+  --frame: #000000;
+  --frame-text: #ffffff;
+  --bg: #161616;
+  --text: #ececea;
+  --soft: #b4b2a9;
+  --muted: #85847f;
+  --accent: #6b8afd;
+  --danger: #f28b82;
+
+  --selected: color-mix(in srgb, var(--text) 10%, transparent);
+
+  --f-soft: color-mix(in srgb, var(--frame-text) 58%, transparent);
+  --f-faint: color-mix(in srgb, var(--frame-text) 44%, transparent);
+  --f-hover: color-mix(in srgb, var(--frame-text) 7%, transparent);
+  --f-selected: color-mix(in srgb, var(--frame-text) 14%, transparent);
+
+  /* Schibsted Grotesk for all text; the system face only fills in glyphs it lacks, such as ⌘. */
+  --font: 'Schibsted Grotesk Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Type and shape. One place sets the faces, their weights and sizes, and how round corners
+     are; the rest of the sheet multiplies or reads these. */
+  --font-write: var(--font); /* the tweets themselves */
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace; /* tweet numbers and counts */
+  --w: 400; /* ordinary text */
+  --w-mid: 500; /* names and titles in lists */
+  --w-head: 600; /* headings */
+  --w-write: 400; /* tweet text */
+  --fs: 1; /* scales every interface text size */
+  --write-size: 15px;
+  --track: -0.01em;
+  --track-write: -0.01em;
+  --smoothing: auto; /* the Mac's fuller text rendering, not the thinned one */
+  --round: 0.7; /* scales every corner radius */
+  /* Every icon's line weight, on screen, whatever size it is drawn at. It matches the strokes of
+     the text beside it: 13px regular text draws at about 1.46px, the 15px tweet text at 1.52px. */
+  --icon-line: 1.5px;
+  /* The one outline colour in the app: barely lighter than what is behind it. It edges the pane,
+     the active tab, the page over a wallpaper, and floating things (tooltip, menus). */
+  --outline-strength: 7%; /* a theme whose pane and frame are one colour asks for more (themes.js) */
+  --outline: color-mix(in srgb, var(--frame-text) var(--outline-strength), transparent);
+  --side-w: 220px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Icons share one line weight. The three-dots glyph keeps its own: its dots are the stroke. */
+svg:not(.dots) {
+  stroke-width: var(--icon-line);
+}
+
+svg:not(.dots) * {
+  vector-effect: non-scaling-stroke;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: var(--frame);
+  color: var(--text);
+  font: var(--w) calc(13px * var(--fs))/1.4 var(--font);
+  letter-spacing: var(--track);
+  -webkit-font-smoothing: var(--smoothing);
+  cursor: default;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+}
+
+/* Anything you can click shows the pointing hand; anything switched off does not. */
+button,
+.tab,
+.storm {
+  cursor: pointer;
+}
+
+button:disabled,
+#hints .pill.off {
+  cursor: default;
+}
+
+/* ---------- top bar: traffic lights, sidebar toggle, tabs ---------- */
+
+#top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px 0 84px;
+  color: var(--frame-text);
+  -webkit-app-region: drag;
+}
+
+.icon-btn {
+  -webkit-app-region: no-drag;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(9px * var(--round));
+  background: transparent;
+  color: var(--f-soft);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.icon-btn svg,
+.tab-close svg {
+  display: block;
+}
+
+.icon-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--frame-text) 11%, transparent);
+  color: var(--frame-text);
+}
+
+.icon-btn:disabled {
+  color: color-mix(in srgb, var(--frame-text) 22%, transparent);
+}
+
+/* With the sidebar open the first tab starts where the pane below starts; the offset is the
+   sidebar's width less what sits before the tabs (84px for the window buttons, the 28px
+   toggle and a 6px gap). Collapsed, the tabs follow straight on from the toggle. */
+#tabs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin-left: calc(var(--side-w) - 118px);
+  transition: margin-left 0.18s ease;
+}
+
+body.collapsed #tabs {
+  margin-left: 0;
+}
+
+.tab {
+  -webkit-app-region: no-drag;
+  flex: 0 1 auto;
+  width: 210px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 56px;
+  height: 30px;
+  padding: 0 4px 0 12px;
+  border: 1px solid transparent;
+  border-radius: calc(9px * var(--round));
+  background: var(--f-hover);
+  color: var(--f-soft);
+}
+
+.tab:hover {
+  background: color-mix(in srgb, var(--frame-text) 10%, transparent);
+}
+
+.tab.current {
+  border-color: var(--outline);
+  background: var(--f-selected);
+  color: var(--frame-text);
+}
+
+.tab-icon {
+  flex: none;
+  margin-right: 3px;
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  visibility: hidden;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(6px * var(--round));
+  background: transparent;
+  color: var(--f-soft);
+}
+
+.tab:hover .tab-close {
+  visibility: visible;
+}
+
+.tab-close:hover {
+  background: var(--f-selected);
+  color: var(--frame-text);
+}
+
+/* The list that drops from the tab bar's + to open an existing storm in a new tab, and the
+   small menu behind a storm's three dots. */
+#picker,
+#row-menu {
+  inset: auto;
+  width: 300px;
+  max-height: min(420px, calc(100vh - 80px));
+  margin: 0;
+  padding: 4px; /* a highlighted line sits 4px inside the edge, and its corners follow the edge's */
+  overflow-y: auto;
+  border: 1px solid var(--outline); /* same faint outline as the tooltip */
+  border-radius: calc(12px * var(--round));
+  background: var(--bg);
+  color: var(--text);
+  -webkit-app-region: no-drag;
+}
+
+#row-menu {
+  width: 208px; /* MENU_WIDTH in app.js */
+}
+
+/* A line of that menu: icon, then label. Lines are 28px tall and touch; the icon sits 8px in
+   from the line's edge and the label 8px after it. */
+#row-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+#row-menu .menu-item + .menu-item {
+  margin-top: 0;
+}
+
+#row-menu .menu-item svg {
+  flex: none;
+  color: var(--soft);
+}
+
+#row-menu .menu-item.danger,
+#row-menu .menu-item.danger svg {
+  color: var(--danger);
+}
+
+#row-menu .menu-item:disabled,
+#row-menu .menu-item:disabled svg {
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.picker-label {
+  padding: 6px 10px 8px;
+  color: var(--muted);
+  font-size: calc(12px * var(--fs));
+}
+
+.picker-row {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: calc(8px * var(--round));
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.picker-row:hover,
+.picker-row:focus-visible {
+  outline: none;
+  background: var(--selected);
+}
+
+.picker-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-meta {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-mono); /* like the counts beside each tweet */
+  font-size: calc(12px * var(--fs));
+}
+
+/* ---------- sidebar ---------- */
+
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--side-w);
+  min-height: 0;
+  overflow: hidden;
+  color: var(--frame-text);
+  transition: width 0.18s ease;
+}
+
+#sidebar > * {
+  width: var(--side-w);
+}
+
+#side-storms > * {
+  flex-shrink: 0;
+}
+
+body.collapsed #sidebar {
+  width: 0;
+  visibility: hidden;
+  transition: width 0.18s ease, visibility 0s 0.18s;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 6px 18px;
+}
+
+/* The heading: the storm bubble, then "Storms". */
+.side-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--f-faint);
+  font-size: calc(12px * var(--fs));
+}
+
+.side-label svg {
+  display: block;
+  flex: none;
+}
+
+#list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.storm {
+  padding: 8px 10px;
+  border-radius: calc(10px * var(--round));
+}
+
+.storm:hover,
+.storm.menu-open {
+  background: var(--f-hover);
+}
+
+.storm-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Three dots on the name's line, at its right end, there while the pointer is on the row or
+   its menu is open. No box of their own: they brighten to the text colour under the pointer.
+   The negative margin puts the last dot as far from the row's edge as the name is from the
+   other. */
+.storm-more {
+  display: none;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 18px;
+  margin-right: -5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--f-soft);
+  transition: color 0.12s ease;
+}
+
+.storm-more svg {
+  display: block;
+}
+
+.storm:hover .storm-more,
+.storm.menu-open .storm-more {
+  display: grid;
+}
+
+.storm-more:hover,
+.storm.menu-open .storm-more {
+  color: var(--frame-text);
+}
+
+.storm.renaming .storm-more {
+  display: none;
+}
+
+/* The title, while it is being renamed: the same line of text, now with a caret. */
+.storm-rename {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 1lh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--frame-text);
+  font: inherit;
+  cursor: text;
+}
+
+.storm-rename::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.storm.current {
+  background: var(--f-selected);
+}
+
+.storm-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storm.current .storm-title {
+  font-weight: var(--w-mid);
+}
+
+.storm-meta {
+  overflow: hidden;
+  color: var(--f-faint);
+  font-family: var(--font-mono); /* like the counts beside each tweet */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(12px * var(--fs));
+}
+
+.side-foot {
+  padding: 0 8px 8px;
+}
+
+.side-link {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: calc(10px * var(--round));
+  background: transparent;
+  color: var(--f-soft);
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.side-link svg {
+  display: block;
+  flex: none;
+}
+
+/* The shortcut sits at the far end as plain dimmer text, with no chip behind it, as far from
+   the right edge as the icon is from the left. */
+.side-link .keys {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  line-height: inherit;
+}
+
+.side-link:hover {
+  background: var(--f-hover);
+  color: var(--frame-text);
+}
+
+/* ---------- pane: a rounded sheet set into the frame ---------- */
+
+main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 8px 8px 0;
+  border: 1px solid var(--outline);
+  border-radius: calc(14px * var(--round));
+  overflow: hidden;
+  background: var(--bg);
+  transition: margin-left 0.18s ease;
+}
+
+body.collapsed main {
+  margin-left: 8px;
+}
+
+/* The wallpaper (the image, dithered) and the shade that fades it out
+   completely into the pane colour towards the bottom. Both show only while the open storm
+   is still empty. */
+#wall,
+#shade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+
+/* Same layout the shader library would give its canvas. */
+#wall-dither {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+/* The blur and grain effects: the image itself as a layer, a little oversized so its slow
+   drift (and, blurred, its soft edges) stay out of sight. Blur and grain are sized against the
+   surface they are on, so the small preview in Settings looks like the full pane. */
+#wall-dither,
+#wallpaper-preview-dither {
+  container-type: size;
+  overflow: hidden;
+}
+
+.wall-fx,
+.wall-noise {
+  position: absolute;
+  inset: 0;
+}
+
+.wall-image {
+  position: absolute;
+  inset: -4%;
+  background-position: center;
+  background-size: cover;
+  animation: wall-drift 46s ease-in-out infinite alternate;
+}
+
+/* Out of focus by a touch: shapes stay readable, edges go soft. */
+.wall-blur .wall-image {
+  filter: blur(0.55cqw);
+}
+
+/* Film grain, lying still over the drifting image. */
+.wall-noise {
+  background-size: 17cqw;
+  mix-blend-mode: overlay;
+  opacity: 0.3;
+}
+
+@keyframes wall-drift {
+  from {
+    transform: translate(-1.2%, -0.7%) scale(1);
+  }
+  to {
+    transform: translate(1.2%, 0.7%) scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-image {
+    animation: none;
+  }
+}
+
+#wall-dither canvas,
+#wallpaper-preview-dither canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#shade {
+  background: linear-gradient(
+    to bottom,
+    transparent 12%,
+    color-mix(in srgb, var(--bg) 30%, transparent) 38%,
+    color-mix(in srgb, var(--bg) 78%, transparent) 62%,
+    var(--bg) 84%
+  );
+}
+
+body.wall #wall,
+body.wall #shade {
+  opacity: 1;
+}
+
+#status {
+  position: absolute;
+  top: 13px;
+  right: 18px;
+  z-index: 1;
+  color: var(--muted);
+  font-family: var(--font-mono); /* like the counts beside each tweet */
+  font-size: calc(12px * var(--fs));
+}
+
+#status.error {
+  color: var(--danger);
+}
+
+#scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 44px 24px 0;
+  cursor: text;
+}
+
+#editor {
+  max-width: 800px;
+  margin: 0 auto 56px;
+  padding: 6px 40px 24px;
+  border: 1px solid transparent;
+  border-radius: calc(18px * var(--round));
+  transition: background-color 0.3s ease, border-color 0.3s ease, max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Over the wallpaper the page is a solid sheet of the pane colour. */
+/* It is only as big as an empty storm needs, and opens out to the full page as you start. */
+body.wall #editor {
+  max-width: 524px;
+  padding: 6px 52px 20px; /* the extra width goes equally to both sides */
+  border-color: var(--outline);
+  background: var(--bg);
+}
+
+body.wall .tweet > .gutter {
+  display: none; /* nothing to count yet, so no column for it */
+}
+
+/* The storm reads as a thread: a numbered chip beside each tweet, joined by a short rail. */
+#tweets {
+  counter-reset: tweet;
+}
+
+.tweet {
+  counter-increment: tweet;
+  position: relative;
+  display: grid;
+  /* the tweet (its text, then its copy button), and outside it a column for the count */
+  grid-template-columns: minmax(0, 1fr) 26px 64px;
+  column-gap: 14px;
+  margin: 0 -16px;
+  padding: 12px 16px 22px 58px;
+}
+
+.tweet::before {
+  content: counter(tweet);
+  position: absolute;
+  top: 11px;
+  left: 16px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: calc(9px * var(--round));
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--soft);
+  font: 12px/1 var(--font-mono);
+}
+
+.tweet:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 43px;
+  bottom: -5px;
+  left: 28px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+/* Each part of a row keeps its own column, so an empty tweet (which has no copy button)
+   still shows its count in the count column. */
+.tweet > .field {
+  grid-column: 1;
+}
+
+.tweet > .copy {
+  grid-column: 2;
+}
+
+.tweet > .gutter {
+  grid-column: 3;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* lets a long link wrap instead of widening the column */
+}
+
+.field > * {
+  grid-area: 1 / 1;
+}
+
+.text {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: var(--w-write) var(--write-size)/24px var(--font-write);
+  letter-spacing: var(--track-write);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* The words you see are drawn by the backdrop, which sits over the textarea; the textarea
+   underneath takes the typing and shows only its caret and selection. That is what lets the
+   part of a tweet past the limit be a different colour. */
+.backdrop {
+  position: relative;
+  z-index: 1;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.backdrop mark {
+  background: transparent;
+  color: var(--danger);
+}
+
+textarea.text {
+  display: block;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--accent);
+  user-select: text;
+}
+
+textarea.text::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: transparent;
+}
+
+textarea.text::placeholder {
+  color: var(--muted);
+}
+
+/* The right column: each tweet's character count, level with its first line. */
+#editor.blank .gutter {
+  opacity: 0;
+}
+
+.gutter {
+  transition: opacity 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin-left: 6px;
+  color: var(--muted);
+  font: 12px/24px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.tweet.over .gutter {
+  color: var(--danger);
+}
+
+.excess {
+  line-height: 16px;
+}
+
+/* Copy: an icon button like the others, shown while the pointer is on its tweet. */
+.copy {
+  display: grid;
+  place-items: center;
+  visibility: hidden;
+  width: 26px;
+  height: 26px;
+  margin-top: -1px; /* centres the 26px button on the 24px first line */
+  padding: 0;
+  border: 0;
+  border-radius: calc(8px * var(--round));
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--soft);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.copy[hidden] {
+  display: none;
+}
+
+.copy svg {
+  display: block;
+}
+
+.tweet:hover .copy:not([hidden]) {
+  visibility: visible;
+}
+
+.copy:hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  color: var(--text);
+}
+
+/* Pill: a label with its shortcut in a chip. Tooltips and the editor's action buttons share it. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: calc(10px * var(--round));
+  font-size: calc(13px * var(--fs));
+  line-height: 19px;
+  white-space: nowrap;
+}
+
+/* A shortcut chip sits closer to the pill's edge than text does, so the two look evenly inset. */
+.pill:has(.keys) {
+  padding-right: 5px; /* the chip's inset matches top and bottom */
+}
+
+.keys {
+  padding: 0 5px;
+  border-radius: calc(6px * var(--round));
+  line-height: 24px; /* the chip is taller than the label's line and sets the pill's height */
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  letter-spacing: 0.04em;
+}
+
+#hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0 42px;
+  cursor: default;
+}
+
+#hints .pill {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--soft);
+  transition: background-color 0.12s ease, color 0.25s ease;
+}
+
+#hints .pill:not(.off):hover {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+}
+
+#hints .pill.off {
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+/* Tooltip: a pill in the pane colour, set apart by an outline. The one place the app draws a
+   border around a surface, so the tooltip never melts into what is behind it. */
+#tip {
+  position: fixed;
+  z-index: 10;
+  display: none;
+  border: 1px solid var(--outline);
+  background: var(--bg);
+  color: var(--frame-text);
+  pointer-events: none;
+}
+
+#tip.on {
+  display: inline-flex;
+}
+
+#measure {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  visibility: hidden;
+}
+
+/* ---------- settings: a tab of its own, with its sections listed in the sidebar ---------- */
+
+#side-storms,
+#side-settings {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.in-settings #side-storms,
+body:not(.in-settings) #side-settings {
+  display: none;
+}
+
+.side-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: calc(10px * var(--round));
+  background: transparent;
+  color: var(--frame-text);
+  text-align: left;
+}
+
+.side-back svg {
+  margin: 0 1px; /* 14px wide over the 16px icons below: centred on them, and the labels line up */
+}
+
+.side-back:hover {
+  background: var(--f-hover);
+}
+
+#settings-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* icon, then name: the same spacing as the Settings button */
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: calc(10px * var(--round));
+  background: transparent;
+  color: var(--f-soft);
+  text-align: left;
+}
+
+.side-item svg {
+  display: block;
+  flex: none;
+}
+
+.side-item:hover {
+  background: var(--f-hover);
+}
+
+.side-item.current {
+  background: var(--f-selected);
+  color: var(--frame-text);
+}
+
+#settings-page {
+  position: relative;
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 44px 24px 56px;
+}
+
+body.in-settings #settings-page {
+  display: block;
+}
+
+body.in-settings #scroll {
+  display: none;
+}
+
+.settings-body {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+#settings-page h1 {
+  margin: 0 0 30px;
+  font-size: calc(22px * var(--fs));
+  font-weight: var(--w-head);
+}
+
+#settings-page h2 {
+  margin: 0 0 10px;
+  font-size: calc(14px * var(--fs));
+  font-weight: var(--w-head);
+}
+
+.settings-group {
+  margin-bottom: 32px;
+  padding: 16px 18px;
+  border-radius: calc(14px * var(--round));
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.settings-row + .settings-row {
+  margin-top: 16px;
+}
+
+/* A choice between a few named options, side by side; the chosen one is filled in. */
+.segmented {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: calc(10px * var(--round));
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.segmented button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: calc(7px * var(--round));
+  background: transparent;
+  color: var(--soft);
+  line-height: 18px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.segmented button:not(.current):not(:disabled):hover {
+  color: var(--text);
+}
+
+.segmented button.current {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+  color: var(--text);
+}
+
+.segmented button:disabled {
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+.row-title {
+  font-weight: var(--w-mid);
+}
+
+.row-help {
+  margin-top: 2px;
+  color: var(--soft);
+}
+
+.row-value {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: calc(12px * var(--fs));
+}
+
+.row-value.error {
+  color: var(--danger);
+}
+
+.row-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.btn {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: calc(9px * var(--round));
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  transition: background-color 0.12s ease;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.btn:disabled {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: color-mix(in srgb, var(--text) 26%, transparent);
+}
+
+.btn.icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.btn.icon svg {
+  display: block;
+}
+
+/* The wallpaper preview: a small version of the page a new storm opens on, with the image,
+   its dither and fade, and the empty storm sitting on top. */
+#wallpaper-preview {
+  position: relative;
+  height: 236px;
+  margin-top: 16px;
+  border-radius: calc(12px * var(--round));
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#wallpaper-preview[hidden] {
+  display: none;
+}
+
+#wallpaper-preview-dither,
+.preview-shade {
+  position: absolute;
+  inset: 0;
+}
+
+#wallpaper-preview-dither {
+  isolation: isolate;
+}
+
+.preview-shade {
+  background: linear-gradient(
+    to bottom,
+    transparent 12%,
+    color-mix(in srgb, var(--bg) 30%, transparent) 38%,
+    color-mix(in srgb, var(--bg) 78%, transparent) 62%,
+    var(--bg) 84%
+  );
+}
+
+.preview-page {
+  position: relative;
+  width: min(430px, 78%);
+  margin: 38px auto 0;
+  padding: 12px 14px 14px;
+  border-radius: calc(14px * var(--round));
+  background: var(--bg);
+}
+
+.preview-tweet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-chip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: calc(8px * var(--round));
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--soft);
+  font: 11px/1 var(--font-mono);
+}
+
+.preview-text {
+  flex: 1;
+  color: var(--muted);
+}
+
+
+.preview-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 0 34px;
+}
+
+/* The real pills at about five-sixths of their size. */
+.preview-pills .pill {
+  gap: 7px;
+  padding: 4px 4px 4px 8px;
+  border-radius: calc(8px * var(--round));
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: color-mix(in srgb, var(--text) 30%, transparent); /* at rest, as on a real new storm */
+  font-size: calc(11px * var(--fs));
+  line-height: 16px;
+}
+
+.preview-pills .keys {
+  padding: 0 4px;
+  border-radius: calc(5px * var(--round));
+  line-height: 20px;
+}
+
+.row-value:empty {
+  display: none;
+}
+
+#themes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.theme {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--soft);
+  text-align: center;
+}
+
+.theme-preview {
+  display: block;
+  height: 78px;
+  padding: 9px 9px 9px 24px;
+  border: 2px solid transparent;
+  border-radius: calc(12px * var(--round));
+  background: var(--p-frame);
+}
+
+.theme.current .theme-preview,
+.mode.current .theme-preview {
+  border-color: var(--accent);
+}
+
+/* Mode cards: the same thumbnail, smaller. System shows the light half and the dark half. */
+.mode {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.mode .theme-preview {
+  width: 96px;
+  height: 60px;
+  padding: 7px 7px 7px 18px;
+  border-radius: calc(11px * var(--round));
+}
+
+.mode .theme-pane {
+  padding: 8px 7px;
+}
+
+.mode-split {
+  position: relative;
+  display: block;
+}
+
+.mode-split .half {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 50%);
+}
+
+.theme-pane {
+  position: relative;
+  display: block;
+  height: 100%;
+  padding: 10px 9px;
+  border-radius: calc(6px * var(--round));
+  background: var(--p-bg);
+}
+
+.theme-line {
+  display: block;
+  width: 62%;
+  height: 2px;
+  margin-bottom: 4px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--p-text) 65%, transparent);
+}
+
+.theme-line + .theme-line {
+  width: 40%;
+}
+
+.theme-dot {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--p-accent);
+}
+
+.theme-name {
+  display: block;
+  margin-top: 7px;
+  font-size: calc(12px * var(--fs));
+}
+
+.theme.current .theme-name {
+  color: var(--text);
+}
+
+/* ---------- motion ---------- */
+
+/* When a new tweet opens up, the rail leading down to it draws itself in. */
+@keyframes rail-draw {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.tweet.draw-rail::after {
+  transform-origin: top;
+  animation: rail-draw 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tweet.draw-rail::after {
+    animation: none;
+  }
+}
+
+/* Stacked rows (storms, Settings sections, the picker) sit a little apart, so a hovered row
+   and the selected one next to it read as two shapes rather than one block. */
+.storm + .storm,
+.side-item + .side-item,
+.picker-row + .picker-row {
+  margin-top: 4px;
+}
+
+/* Scrollbars take the theme's own colours: a faint thumb in the text colour of whatever it
+   sits on (frame or pane) and no track, so nothing grey shows through on a tinted theme... */
+html {
+  scrollbar-color: color-mix(in srgb, var(--frame-text) 20%, transparent) transparent;
+}
+
+main,
+#picker {
+  scrollbar-color: color-mix(in srgb, var(--text) 20%, transparent) transparent;
+}
+
+/* ...and the slimmer of the two system widths. This one is not inherited, so every scroller is named. */
+#list,
+#settings-nav,
+#scroll,
+#settings-page,
+#picker {
+  scrollbar-width: thin;
+}
+
+/* Where a scrollbar takes room of its own (a mouse, or "always show"), it sits in the list's
+   right-hand inset rather than beside it: the inset drops to a sliver and the rows are capped
+   at the width they have without a scrollbar, so they keep their 8px either side when there
+   is none and sit close to the thumb when there is one. */
+#list,
+#settings-nav {
+  padding-right: 1px;
+}
+
+#list > *,
+#settings-nav > * {
+  max-width: calc(var(--side-w) - 16px);
+}
+
+#picker {
+  padding-right: 1px;
+}
+
+#picker > * {
+  max-width: 290px; /* the picker's 300px, less its outline and 4px either side */
+}
+
+/* The sidebar's right edge can be dragged to set its width. The grip is an unseen strip over
+   the seam between sidebar and pane; only the cursor says it is there. While it is dragged,
+   the eased width changes used for collapsing are switched off so the edge keeps up. */
+#side-resize {
+  position: fixed;
+  z-index: 3;
+  top: 44px;
+  bottom: 8px;
+  left: calc(var(--side-w) - 3px);
+  width: 7px;
+  cursor: col-resize;
+}
+
+body.collapsed #side-resize {
+  display: none;
+}
+
+body.resizing,
+body.resizing * {
+  cursor: col-resize !important;
+}
+
+body.resizing #sidebar,
+body.resizing #tabs,
+body.resizing main {
+  transition: none;
+}
+
+/* Changing tabs is a cut: nothing eases while one tab's page replaces another's. */
+body.switching #editor,
+body.switching #wall,
+body.switching #shade,
+body.switching .gutter,
+body.switching #hints .pill {
+  transition: none;
+}

@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+
+# Branding and design working files stay on this Mac.
+design/

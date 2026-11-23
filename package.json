@@ -1,0 +1,19 @@
+{
+  "name": "storm",
+  "productName": "Storm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Write and keep tweet storms",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.4.1"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "@paper-design/shaders": "^0.0.82"
+  }
+}

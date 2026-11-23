@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; script-src 'self'; img-src 'self' blob:" />
+    <title>Storm</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource-variable/schibsted-grotesk/index.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource-variable/geist-mono/index.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header id="top">
+      <button id="toggle-sidebar" class="icon-btn" data-tip="Toggle sidebar" data-keys="⌘B" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+          <path d="M4 2.5h8A2.5 2.5 0 0 1 14.5 5v6a2.5 2.5 0 0 1-2.5 2.5H4A2.5 2.5 0 0 1 1.5 11V5A2.5 2.5 0 0 1 4 2.5zM6 2.5v11" />
+        </svg>
+      </button>
+      <div id="tabs"></div>
+      <button id="open-tab" class="icon-btn" popovertarget="picker" data-tip="New tab" data-keys="⌘T" aria-label="New tab"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg></button>
+    </header>
+    <div id="picker" popover></div>
+    <div id="row-menu" popover></div>
+
+    <div id="side-resize" aria-hidden="true"></div>
+
+    <aside id="sidebar">
+      <div id="side-storms">
+      <div class="side-head">
+        <span class="side-label"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></svg>Storms</span>
+        <button id="new" class="icon-btn" data-tip="New storm" data-keys="⌘N" aria-label="New storm"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 4.25H9.5a5.25 5.25 0 0 0-5.25 5.25v5a5.25 5.25 0 0 0 5.25 5.25h5a5.25 5.25 0 0 0 5.25-5.25v-2M17.6 3.85a1.8 1.8 0 0 1 2.55 2.55l-7.3 7.3a2 2 0 0 1-.93.52l-2.42.58.58-2.42a2 2 0 0 1 .52-.93z" /></svg></button>
+      </div>
+      <nav id="list"></nav>
+      <div class="side-foot">
+        <button id="open-settings" class="side-link"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM16 12a4 4 0 1 1 -8 0 4 4 0 0 1 8 0z" /></svg><span>Settings</span><span class="keys">⌘P</span></button>
+      </div>
+      </div>
+      <div id="side-settings">
+        <button id="settings-back" class="side-back" aria-label="Close settings">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8H3M7 4L3 8l4 4" /></svg>
+          Settings
+        </button>
+        <nav id="settings-nav"></nav>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wall" aria-hidden="true">
+        <div id="wall-dither"></div>
+      </div>
+      <div id="shade"></div>
+      <span id="status"></span>
+      <div id="scroll">
+        <div id="editor">
+          <div id="tweets"></div>
+          <div id="hints">
+            <button class="pill" data-act="new-tweet">New tweet <span class="keys">⌘↵</span></button>
+            <button class="pill" data-act="merge-up">Merge up <span class="keys">⌫</span></button>
+            <button class="pill" data-act="new-storm">New storm <span class="keys">⌘N</span></button>
+          </div>
+        </div>
+      </div>
+      <div id="settings-page">
+        <div class="settings-body">
+          <section data-section="appearance" data-name="Appearance" data-icon="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8zM13.5 6.5h.01M17.5 10.5h.01M6.5 12.5h.01M8.5 7.5h.01">
+            <h1>Appearance</h1>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Mode</div>
+                  <div class="row-help">Light, dark, or whichever your Mac is set to.</div>
+                </div>
+                <div id="modes" class="row-actions"></div>
+              </div>
+            </div>
+            <h2>Theme</h2>
+            <div class="settings-group">
+              <div id="themes"></div>
+            </div>
+            <h2>Wallpaper</h2>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Background image</div>
+                  <div class="row-help">Shown behind a new storm until you start writing.</div>
+                </div>
+                <div class="row-actions">
+                  <button id="wallpaper-choose" class="btn icon" data-tip="Choose image" aria-label="Choose image"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 5h6M19 2v6M21 11.5v5a4.5 4.5 0 0 1-4.5 4.5h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3h5M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6.2 20.8M11 9a2 2 0 1 1 -4 0 2 2 0 0 1 4 0z" /></svg></button>
+                  <button id="wallpaper-none" class="btn icon" data-tip="Remove image" aria-label="Remove image" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6M14 11v6M19 6v13a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6M3 6h18M8 6V5a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v1" /></svg></button>
+                </div>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Effect</div>
+                  <div class="row-help">How the image is drawn.</div>
+                </div>
+                <div id="wallpaper-effects" class="segmented" role="radiogroup" aria-label="Effect"></div>
+              </div>
+              <div id="wallpaper-preview" aria-hidden="true" hidden>
+                <div id="wallpaper-preview-dither"></div>
+                <div class="preview-shade"></div>
+                <div class="preview-page">
+                  <div class="preview-tweet"><span class="preview-chip">1</span><span class="preview-text">Start your storm</span></div>
+                  <div class="preview-pills">
+                    <span class="pill">New tweet <span class="keys">⌘↵</span></span>
+                    <span class="pill">Merge up <span class="keys">⌫</span></span>
+                    <span class="pill">New storm <span class="keys">⌘N</span></span>
+                  </div>
+                </div>
+              </div>
+              <div id="wallpaper-current" class="row-value"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <div id="tip" class="pill" role="tooltip"></div>
+    <div id="measure" class="text" aria-hidden="true"></div>
+    <script src="themes.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
