@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, clipboard, ClipboardItem, shell, dialog, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const ai = require('./ai');
 
 // One Markdown file per storm, in Documents/Storms. STORM_DIR overrides the folder and keeps the app's own
 // state beside it, so a test run never touches the real storms or settings.
@@ -199,6 +200,104 @@ ipcMain.handle('media:trash', async (_e, id) => {
 ipcMain.handle('wallpaper:get', () => wallpaper());
 ipcMain.handle('wallpaper:choose', () => chooseWallpaper());
 ipcMain.handle('wallpaper:clear', () => setWallpaper({ kind: 'none' }));
+// AI. settings.json's `ai` holds the connections that have been made and the model chosen:
+// { connections: { claude: { enabled }, … }, model: { provider, id, name } }. Several can be
+// held at once; each can be switched off without being let go. A provider is only held once it
+// has answered, and every request comes back as { ok, … } so the window can say what went
+// wrong in the provider's own words.
+function aiSettings() {
+  const saved = readSettings().ai || {};
+  // Before several could be held, `ai.provider` named the one in use.
+  const connections = saved.connections || (ai.has(saved.provider) ? { [saved.provider]: { enabled: true } } : {});
+  return { connections, model: saved.model || null };
+}
+const saveAi = (next) => writeSettings({ ...readSettings(), ai: next });
+const aiOn = (s, id) => Boolean(s.connections[id]?.enabled);
+
+/** The model requests go to: the one chosen, while its provider is held and switched on;
+    failing that, the usual model of the first provider that is. Null when none is. */
+async function aiModel(s = aiSettings()) {
+  if (s.model && aiOn(s, s.model.provider)) {
+    // A choice the provider no longer lists (its models were renamed or retired) gives way to its usual one.
+    const offered = await ai.models(s.model.provider);
+    if (!offered.length || offered.some((m) => m.id === s.model.id)) return s.model;
+  }
+  const chosenFirst = [...ai.list()].sort((x, y) => (y.id === s.model?.provider) - (x.id === s.model?.provider));
+  for (const p of chosenFirst) {
+    const usual = aiOn(s, p.id) && (await ai.models(p.id)).find((m) => m.usual);
+    if (usual) return { provider: p.id, id: usual.id, name: usual.name };
+  }
+  return null;
+}
+
+/** Everything the AI page draws: each provider with what is known of its tool (once this Mac
+    has been looked over), whether it is held and switched on, and its models; and the model in use. */
+let aiSeen = null; // the last look over this Mac
+async function aiView() {
+  const s = aiSettings();
+  const providers = await Promise.all((aiSeen || ai.list()).map(async (p) => ({ ...p, connected: Boolean(s.connections[p.id]), enabled: aiOn(s, p.id), models: await ai.models(p.id) })));
+  return { providers, model: await aiModel(s) };
+}
+const asking = new Map(); // request key → the means to call it off
+/** Runs one cancellable piece of work under `key`. Called off, it resolves `{ ok: false, cancelled: true }`. */
+async function cancellable(key, work) {
+  const stop = new AbortController();
+  asking.set(key, stop);
+  try {
+    const result = await work(stop.signal);
+    return stop.signal.aborted ? { ok: false, cancelled: true } : result;
+  } catch (e) {
+    return stop.signal.aborted ? { ok: false, cancelled: true } : { ok: false, error: e.message };
+  } finally {
+    asking.delete(key);
+  }
+}
+ipcMain.handle('ai:list', () => aiView());
+ipcMain.handle('ai:status', async () => {
+  aiSeen = await ai.inspect();
+  await Promise.all(aiSeen.map((p) => ai.models(p.id, true)));
+  return aiView();
+});
+ipcMain.handle('ai:signin', (_e, key, id) => cancellable(key, (signal) => ai.signIn(id, { signal })));
+ipcMain.handle('ai:connect', async (_e, key, id) => {
+  const result = await cancellable(key, (signal) => ai.check(id, { signal }));
+  if (result.ok) {
+    // The model in use stays the model in use: a connection added beside it does not take over.
+    const s = aiSettings();
+    saveAi({ connections: { ...s.connections, [id]: { enabled: true } }, model: await aiModel(s) });
+  }
+  return result;
+});
+ipcMain.handle('ai:enable', (_e, id, on) => {
+  const s = aiSettings();
+  if (s.connections[id]) saveAi({ ...s, connections: { ...s.connections, [id]: { enabled: Boolean(on) } } });
+  return aiView();
+});
+// Letting a connection go only makes Storm forget it: the tool stays signed in for its own use.
+ipcMain.handle('ai:disconnect', (_e, id) => {
+  const s = aiSettings();
+  const { [id]: gone, ...connections } = s.connections;
+  saveAi({ connections, model: s.model?.provider === id ? null : s.model });
+  return aiView();
+});
+ipcMain.handle('ai:model', async (_e, provider, id) => {
+  const s = aiSettings();
+  const model = (await ai.models(provider)).find((m) => m.id === id);
+  if (model && aiOn(s, provider)) saveAi({ ...s, model: { provider, id: model.id, name: model.name } });
+  return aiView();
+});
+ipcMain.handle('ai:page', (_e, id) => {
+  const url = ai.pageOf(id);
+  if (url) return headless ? console.log('OPEN ' + url) : shell.openExternal(url);
+});
+ipcMain.handle('ai:ask', (_e, key, request) =>
+  cancellable(key, async (signal) => {
+    const model = await aiModel();
+    if (!model) return { ok: false, error: 'No AI is connected.' };
+    return { ok: true, text: await ai.ask(model.provider, request, { signal, model: model.id }) };
+  })
+);
+ipcMain.handle('ai:cancel', (_e, key) => asking.get(key)?.abort());
 ipcMain.on('storms:saveSync', (e, id, text, mtime) => {
   try {
     save(id, text, mtime);

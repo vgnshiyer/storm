@@ -1714,7 +1714,264 @@ function renderSettings() {
   );
   for (const s of sectionEls) s.hidden = s.dataset.section !== sectionId;
   renderAppearance();
+  renderAI();
+  if (sectionId === 'ai') refreshAI();
 }
+
+// ---------- settings: Intelligence ----------
+// The Intelligence page (its section is still called `ai` in the code) lists the ways Storm can reach a model, and the model it asks. Connect opens a
+// dialog that works through three steps by itself: the tool is installed, it is signed in (the
+// tool opens its own page in the browser), and it has answered. Only an answer makes it a held
+// connection. Several can be held; each has a switch, and a menu to connect again or let go.
+
+/** What main last reported: `{ providers, model }`. Each provider says whether it is held
+    (`connected`), switched on (`enabled`) and what `models` it offers; its `installed` is
+    undefined until this Mac has been looked over. `model` is the one requests go to. */
+let ai = null;
+/** The connection being made in the dialog, or null:
+    `{ id, key, phase, installed, version, signedIn, error, ms }`, where phase is one of
+    'looking', 'install', 'signin', 'checking', 'done', 'failed-signin' and 'failed-check'. */
+let connecting = null;
+
+const TODO_ICON = 'M12.5 8a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0z';
+const DONE_ICON = 'M3.5 8.5l3 3 6-7';
+
+/** Where a provider's tool stands, in a word or two; nothing when it is held and well. */
+function aiState(p) {
+  if (p.installed === undefined) return p.connected ? '' : 'Checking…';
+  if (!p.installed) return 'Not installed';
+  if (!p.signedIn) return 'Not signed in';
+  return p.connected ? '' : 'Ready';
+}
+
+/** A button on the AI page or in its dialog. */
+function aiButton(label, onClick) {
+  const button = el('button', 'btn', label);
+  button.type = 'button';
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+// Lucide "refresh-cw" and "log-out".
+const RECONNECT_ICON = 'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5';
+const DISCONNECT_ICON = 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9';
+
+/** Puts the small menu by a button on the AI page, its right edge on the button's: under
+    the button, or over it when there is no room below. The menu is not on screen yet, so its
+    height is worked out from its lines (28px each, a heading 29px, 10px of edge). */
+function placeAiMenu(anchor, ...items) {
+  menuEl.replaceChildren(...items);
+  const r = anchor.getBoundingClientRect();
+  const lines = items.reduce((sum, item) => sum + (item.classList.contains('picker-label') ? 29 : 28), 10);
+  const height = Math.min(lines, 420, window.innerHeight - 80);
+  const below = r.bottom + 4;
+  menuEl.style.left = Math.max(8, r.right - MENU_WIDTH) + 'px';
+  menuEl.style.top = (below + height <= window.innerHeight - 8 ? below : Math.max(8, r.top - 4 - height)) + 'px';
+}
+
+/** A button that opens the small menu, filled by `fill(button)` each time it opens. */
+function opensAiMenu(button, fill) {
+  button.popoverTargetElement = menuEl; // the button opens and closes the menu; a click on it never counts as "outside"
+  button.addEventListener('click', (e) => {
+    const open = menuEl.matches(':popover-open');
+    if (open && menuEl.dataset.owner === button.id) return; // a second click closes it
+    if (open) e.preventDefault(); // open for something else: bring it here rather than close it
+    menuEl.dataset.owner = button.id;
+    fill(button);
+  });
+}
+
+function renderAI() {
+  if (!ai) return;
+  $('ai-providers').replaceChildren(
+    ...ai.providers.map((p) => {
+      const row = el('div', 'settings-row');
+      const words = el('div');
+      words.append(el('div', 'row-title', p.name), el('div', 'row-help', `Your ${p.name} subscription, through ${p.tool}.`));
+      const actions = el('div', 'row-actions');
+      const state = aiState(p);
+      if (state) actions.append(el('span', 'row-state', state));
+
+      if (!p.connected) {
+        actions.append(aiButton('Connect', () => connectAI(p.id)));
+      } else {
+        // Held: a switch to use it or rest it, and a menu to connect again or let it go.
+        const toggle = el('button', 'switch');
+        toggle.type = 'button';
+        toggle.setAttribute('role', 'switch');
+        toggle.setAttribute('aria-checked', String(p.enabled));
+        toggle.setAttribute('aria-label', `Use ${p.name}`);
+        toggle.addEventListener('click', async () => {
+          ai = await window.api.aiEnable(p.id, !p.enabled);
+          renderAI();
+        });
+        const more = el('button', 'btn icon');
+        more.type = 'button';
+        more.id = `ai-more-${p.id}`;
+        more.dataset.tip = 'More';
+        more.setAttribute('aria-label', `More for ${p.name}`);
+        const dots = icon(DOTS_ICON, 16, 24);
+        dots.classList.add('dots'); // keeps its own line weight
+        dots.setAttribute('stroke-width', '3.4');
+        more.append(dots);
+        opensAiMenu(more, () => {
+          const disconnect = menuItem(DISCONNECT_ICON, 'Disconnect', async () => {
+            ai = await window.api.aiDisconnect(p.id);
+            renderAI();
+          });
+          disconnect.classList.add('danger');
+          placeAiMenu(more, menuItem(RECONNECT_ICON, 'Reconnect', () => connectAI(p.id)), disconnect);
+        });
+        actions.append(toggle, more);
+      }
+      row.append(words, actions);
+      return row;
+    })
+  );
+
+  // The model: one of those the switched-on connections offer.
+  const offering = ai.providers.filter((p) => p.enabled && p.models.length);
+  $('ai-model').disabled = !offering.length; // nothing to choose from without a connection
+  $('ai-model-name').textContent = offering.length && ai.model ? ai.model.name : 'No connection';
+}
+
+// The model menu: each switched-on connection's models under its name, the one in use ticked.
+opensAiMenu($('ai-model'), (button) => {
+  const items = [];
+  for (const p of ai.providers.filter((x) => x.enabled && x.models.length)) {
+    items.push(el('div', 'picker-label', p.name));
+    for (const m of p.models) {
+      const chosen = ai.model?.provider === p.id && ai.model.id === m.id;
+      const item = menuItem(CHECK_ICON, m.name, async () => {
+        ai = await window.api.aiModel(p.id, m.id);
+        renderAI();
+      });
+      if (!chosen) item.classList.add('unticked');
+      items.push(item);
+    }
+  }
+  placeAiMenu(button, ...items);
+});
+
+/** Looks over this Mac again and redraws. Until the first look is back, the page shows the
+    providers with their state still unknown. */
+let aiLooking = null;
+async function refreshAI() {
+  if (!ai) {
+    ai = await window.api.aiList();
+    renderAI();
+  }
+  aiLooking ??= window.api.aiStatus().finally(() => (aiLooking = null));
+  ai = await aiLooking;
+  renderAI();
+  return ai;
+}
+
+/** Connects a provider, in the dialog: looks for its tool, signs in if it is not signed in (or
+    if `signInAgain` asks for it, after a sign-in that turned out to have run out), then sends
+    one short message. Each wait can be called off by closing the dialog. */
+async function connectAI(id, signInAgain = false) {
+  if (connecting) window.api.cancelAsk(connecting.key);
+  const run = (connecting = { id, key: `connect-${Date.now()}`, phase: 'looking' });
+  const live = () => connecting === run;
+  const step = (phase, more) => {
+    Object.assign(run, { phase }, more);
+    renderConnecting();
+  };
+  renderConnecting();
+  if (!$('ai-dialog').open) $('ai-dialog').showModal();
+
+  const p = (await refreshAI()).providers.find((x) => x.id === id);
+  if (!live()) return;
+  Object.assign(run, { installed: p.installed, version: p.version, signedIn: p.signedIn && !signInAgain });
+  if (!p.installed) return step('install');
+
+  if (!run.signedIn) {
+    step('signin');
+    const signed = await window.api.aiSignIn(run.key, id);
+    if (!live()) return;
+    if (!signed.ok) return step('failed-signin', { error: signed.error });
+    run.signedIn = true;
+  }
+
+  step('checking');
+  const reply = await window.api.aiConnect(run.key, id);
+  if (!live()) return;
+  step(reply.ok ? 'done' : 'failed-check', { ms: reply.ms, error: reply.error });
+  refreshAI();
+}
+
+/** The mark of a step that is under way: a small square of nine dots with a light running
+    round its edge. */
+function aiWaiting() {
+  const dots = el('span', 'waiting');
+  dots.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 9; i++) dots.append(el('i'));
+  return dots;
+}
+
+/** One step in the dialog: a mark (a ring, the nine dots while it is under way, a tick once it
+    is done), what it is, where it stands, and what can be done about it. */
+function aiStep(state, title, text, ...actions) {
+  const row = el('div', 'step ' + state);
+  const words = el('div', 'step-words');
+  words.append(el('div', 'row-title', title), el('div', 'row-help' + (state === 'failed' ? ' error' : ''), text));
+  const buttons = el('div', 'row-actions');
+  buttons.append(...actions.filter(Boolean));
+  row.append(state === 'busy' ? aiWaiting() : icon(state === 'done' ? DONE_ICON : TODO_ICON, 16), words, buttons);
+  return row;
+}
+
+function renderConnecting() {
+  const run = connecting;
+  if (!run) return;
+  const p = ai.providers.find((x) => x.id === run.id);
+  const { phase } = run;
+  $('ai-dialog-title').textContent = `Connect ${p.name}`;
+  $('ai-dialog-sub').textContent = `Use your own ${p.name} subscription, through ${p.tool}.`;
+
+  const tool =
+    phase === 'looking'
+      ? aiStep('busy', p.tool, 'Looking for it on this Mac…')
+      : run.installed
+        ? aiStep('done', p.tool, run.version ? `Version ${run.version}` : 'Installed')
+        : aiStep('todo', p.tool, 'Not found on this Mac.', aiButton(`Get ${p.tool}`, () => window.api.aiPage(p.id)));
+
+  const account =
+    phase === 'signin'
+      ? aiStep('busy', 'Account', 'Finish signing in on the page that opened in your browser.')
+      : phase === 'failed-signin'
+        ? aiStep('failed', 'Account', run.error, aiButton('Try again', () => connectAI(p.id, true)))
+        : run.signedIn
+          ? aiStep('done', 'Account', 'Signed in.', phase === 'failed-check' && aiButton('Sign in again', () => connectAI(p.id, true)))
+          : aiStep('todo', 'Account', `Sign in with your ${p.name} account.`);
+
+  const connection =
+    phase === 'checking'
+      ? aiStep('busy', 'Connection', 'Waiting for a reply…')
+      : phase === 'failed-check'
+        ? aiStep('failed', 'Connection', run.error, aiButton('Try again', () => connectAI(p.id)))
+        : phase === 'done'
+          ? aiStep('done', 'Connection', `${p.name} replied in ${(run.ms / 1000).toFixed(1)} s.`)
+          : aiStep('todo', 'Connection', 'One short message, to check it answers.');
+
+  $('ai-dialog-steps').replaceChildren(tool, account, connection);
+  $('ai-dialog-close').textContent = phase === 'done' ? 'Done' : 'Cancel';
+}
+
+// Closing the dialog, by its button or Escape, calls off whatever it was waiting for.
+$('ai-dialog-close').addEventListener('click', () => $('ai-dialog').close());
+$('ai-dialog').addEventListener('close', () => {
+  if (connecting) window.api.cancelAsk(connecting.key);
+  connecting = null;
+  if (sectionId === 'ai') refreshAI();
+});
+
+// Back in Storm after installing a tool or changing something outside it: look again.
+window.addEventListener('focus', () => {
+  if (connecting?.phase === 'install') connectAI(connecting.id);
+  else if (!connecting && document.body.classList.contains('in-settings') && sectionId === 'ai') refreshAI();
+});
 
 /** Opens the settings tab, or goes to it if it is already open. */
 function openSettings() {

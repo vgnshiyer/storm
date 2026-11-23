@@ -129,9 +129,32 @@
               <div id="wallpaper-current" class="row-value"></div>
             </div>
           </section>
+          <section data-section="ai" data-name="Intelligence" data-icon="M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5zM15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5z">
+            <h1>Intelligence</h1>
+            <h2>Connections</h2>
+            <div id="ai-providers" class="settings-group"></div>
+            <p class="settings-note">Storm uses AI only when you ask. It goes through a tool that is signed in to your account, so Storm never sees your account or password.</p>
+            <h2>Model</h2>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Default model</div>
+                  <div class="row-help">Used whenever you ask Storm for help.</div>
+                </div>
+                <button id="ai-model" class="btn select" type="button" disabled><span id="ai-model-name">No connection</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </main>
+
+    <dialog id="ai-dialog" aria-labelledby="ai-dialog-title">
+      <h2 id="ai-dialog-title"></h2>
+      <p id="ai-dialog-sub"></p>
+      <div id="ai-dialog-steps"></div>
+      <div class="dialog-foot"><button id="ai-dialog-close" class="btn" type="button"></button></div>
+    </dialog>
 
     <div id="tip" class="pill" role="tooltip"></div>
     <div id="measure" class="text" aria-hidden="true"></div>
