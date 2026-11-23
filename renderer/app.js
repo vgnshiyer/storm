@@ -7,6 +7,7 @@ const LINE_HEIGHT = 24;
 
 const $ = (id) => document.getElementById(id);
 const listEl = $('list');
+let query = ''; // what the sidebar's search field holds, in lower case; empty when not searching
 const tabsEl = $('tabs');
 const tweetsEl = $('tweets');
 const statusEl = $('status');
@@ -387,8 +388,62 @@ function renderList() {
   const written = storms.filter((s) => !isBlank(s)).sort((a, b) => b.mtime - a.mtime);
   // The tab bar's + has nothing to offer once every storm is open in a tab.
   $('open-tab').disabled = written.every((s) => tabs.includes(s));
-  listEl.replaceChildren(...written.map(buildRow));
+  const shown = query ? written.filter(matches) : written;
+  listEl.replaceChildren(...shown.map(buildRow));
+  if (query && !shown.length) listEl.append(el('div', 'side-empty', 'No storms found'));
 }
+
+// ---------- search: the magnifier swaps the logo for a field that filters the list ----------
+
+const searchEl = $('search');
+const searchToggle = $('search-toggle');
+const headEl = searchEl.closest('.side-head');
+let searchBack = null; // what had the caret before, so Escape can hand it back
+
+/** A storm matches when its name or any of its tweets contains the words typed. */
+const matches = (s) => `${s.name}\n${s.tweets.join('\n')}`.toLowerCase().includes(query);
+
+function setSearching(on, refocus) {
+  if (on === headEl.classList.contains('searching')) return;
+  headEl.classList.toggle('searching', on);
+  searchToggle.classList.toggle('current', on);
+  if (on) {
+    searchBack = document.activeElement;
+    searchEl.focus();
+    return;
+  }
+  searchEl.value = '';
+  if (query) {
+    query = '';
+    renderList();
+  }
+  if (refocus && searchBack instanceof HTMLElement && searchBack.isConnected) searchBack.focus();
+}
+
+/** ⇧⌘F: puts the caret in the search field, bringing the sidebar out first if it is tucked away. */
+function openSearch() {
+  if (document.body.classList.contains('in-settings')) return; // the list of storms is not on screen
+  if (document.body.classList.contains('collapsed')) toggleSidebar();
+  setSearching(true);
+  searchEl.focus();
+  searchEl.select();
+}
+
+searchToggle.addEventListener('mousedown', (e) => e.preventDefault()); // the field keeps its caret, so the click below decides
+searchToggle.addEventListener('click', () => setSearching(!headEl.classList.contains('searching'), true));
+searchEl.addEventListener('input', () => {
+  query = searchEl.value.trim().toLowerCase();
+  renderList();
+});
+searchEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  setSearching(false, true);
+});
+// Left empty, the field has no reason to stay: the logo comes back.
+searchEl.addEventListener('blur', () => {
+  if (!query) setSearching(false, false);
+});
 
 function buildRow(s) {
   const row = el('div', 'storm' + (s === cur ? ' current' : '') + (s === menuFor ? ' menu-open' : ''));
@@ -1016,6 +1071,7 @@ const MENU = {
   'next-tab': () => cycleTab(1),
   'previous-tab': () => cycleTab(-1),
   'toggle-sidebar': toggleSidebar,
+  search: openSearch,
   settings: openSettings,
 };
 window.api.onMenu((action) => MENU[action]?.());

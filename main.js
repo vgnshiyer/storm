@@ -199,6 +199,7 @@ app.whenReady().then(() => {
         label: 'View',
         submenu: [
           action('Toggle Sidebar', 'Cmd+B', 'toggle-sidebar'),
+          action('Search Storms', 'Shift+Cmd+F', 'search'), // ⌘F is kept free for finding within a storm
           action('Show Next Tab', 'Ctrl+Tab', 'next-tab'),
           action('Show Previous Tab', 'Ctrl+Shift+Tab', 'previous-tab'),
           { type: 'separator' },
@@ -215,6 +216,8 @@ app.whenReady().then(() => {
       { role: 'windowMenu' },
     ])
   );
+  // Run from source, the Dock would show Electron's own icon; a packaged app carries its icon itself.
+  if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
   createWindow();
   app.on('activate', () => {
     if (!win) createWindow();

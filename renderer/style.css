@@ -327,22 +327,80 @@ body.collapsed #sidebar {
 .side-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 2px;
   padding: 0 10px 6px 18px;
 }
 
-/* The heading: the storm bubble, then "Storms". */
-.side-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--f-faint);
-  font-size: calc(12px * var(--fs));
+/* The logo: the name, each letter a step heavier than the last, regular to black. Each pair
+   of letters has its own spacing, since five weights side by side do not space themselves. */
+.wordmark {
+  color: var(--frame-text);
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.side-label svg {
+.wordmark i {
+  font-style: normal;
+}
+
+.wordmark i:nth-child(1) { font-weight: 400; margin-right: -0.028em; }
+.wordmark i:nth-child(2) { font-weight: 520; margin-right: -0.03em; }
+.wordmark i:nth-child(3) { font-weight: 640; margin-right: -0.06em; }
+.wordmark i:nth-child(4) { font-weight: 770; margin-right: -0.045em; }
+.wordmark i:nth-child(5) { font-weight: 900; }
+
+/* The heading of the sidebar is the logo. */
+.side-logo {
+  position: relative;
+  top: -1px; /* the letters' bodies, not the text box, sit level with the buttons */
+  margin-right: auto;
+  font-size: 17px;
+}
+
+/* Search: the magnifier swaps the logo for a field, and the list shows only what matches. */
+.side-search {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--frame-text);
+  caret-color: var(--accent);
+  font: inherit;
+  letter-spacing: inherit;
+  user-select: text;
+  -webkit-app-region: no-drag;
+}
+
+.side-search::placeholder {
+  color: var(--f-faint);
+}
+
+.side-search::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.side-head.searching .side-logo {
+  display: none;
+}
+
+.side-head.searching .side-search {
   display: block;
-  flex: none;
+}
+
+.icon-btn.current {
+  background: var(--f-selected);
+  color: var(--frame-text);
+}
+
+.side-empty {
+  padding: 8px 10px;
+  color: var(--f-faint);
 }
 
 #list {
