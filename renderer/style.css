@@ -818,6 +818,109 @@ body.finding #pane-right {
   color: var(--text);
 }
 
+/* Images on a tweet: a row of previews under its words. The row does not wrap: when the
+   images are wider than the tweet, it scrolls sideways. */
+.tweet > .media {
+  grid-column: 1;
+  display: flex;
+  gap: 8px;
+  /* 4px of room all round, taken back by the margins, so the ring drawn round an image while
+     posting is not clipped by the scrolling edge */
+  margin: 6px -4px -4px;
+  padding: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  transition: opacity 0.2s ease;
+}
+
+.tweet > .media:empty {
+  display: none;
+}
+
+.shot {
+  position: relative;
+  flex: none;
+  height: 160px;
+  min-width: 96px;
+  border-radius: calc(12px * var(--round));
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.shot img {
+  display: block;
+  width: auto;
+  max-width: 400px;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* With more than one, an image can be picked up and moved along the row. */
+.shot:not(:only-child) {
+  cursor: grab;
+}
+
+body.posting .shot {
+  cursor: default;
+}
+
+.shot.missing {
+  width: 160px;
+}
+
+/* Remove sits in the thumbnail's corner and shows as the pointer comes over it. */
+.shot-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(7px * var(--round));
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+
+.shot-remove svg {
+  display: block;
+}
+
+.shot:hover .shot-remove {
+  opacity: 1;
+}
+
+.shot-remove:hover {
+  background: var(--bg);
+}
+
+/* The tweet an image is being dragged over. */
+.tweet.drop {
+  border-radius: calc(12px * var(--round));
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: 0 0 0 1px var(--outline);
+}
+
+/* While posting: nothing can be removed, handed-over tweets' images step back with their
+   words, and the image on the clipboard now is ringed. */
+body.posting .shot-remove {
+  display: none;
+}
+
+.tweet.posted > .media {
+  opacity: 0.4;
+}
+
+.shot.now {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* What Find has matched, and the match it is standing on. Only a tint: nothing that would
    move the words. */
 .backdrop .hit {

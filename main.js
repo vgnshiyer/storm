@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, clipboard, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, ClipboardItem, shell, dialog, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -47,6 +47,72 @@ function save(id, text, mtime) {
 async function remove(id) {
   const p = fileFor(id);
   if (fs.existsSync(p)) await shell.trashItem(p);
+}
+
+// ---------- images on tweets ----------
+// A storm's images are copied into a folder of its own beside its file, with the same name,
+// and the storm's Markdown points at them. The originals are left where they were.
+
+const MEDIA_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const STORM_ID = /^\d{4}-\d{2}-\d{2}-\d{6}(-\d+)?$/; // the names the app gives its own storms
+const mediaDir = (id) => fileFor(id).slice(0, -3);
+
+function mediaFile(id, name) {
+  if (typeof name !== 'string' || !name || name.startsWith('.') || path.basename(name) !== name || !MEDIA_TYPES[path.extname(name).toLowerCase()]) {
+    throw new Error('Bad image name');
+  }
+  return path.join(mediaDir(id), name);
+}
+
+/** Saves an image into the storm's folder under a name of its own, and returns that name. */
+function addMedia(id, ext, bytes) {
+  const suffix = String(ext).toLowerCase();
+  if (!MEDIA_TYPES[suffix]) throw new Error('Not an image');
+  const dir = mediaDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  let name;
+  do {
+    name = Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + suffix;
+  } while (fs.existsSync(path.join(dir, name)));
+  fs.writeFileSync(path.join(dir, name), Buffer.from(bytes));
+  return name;
+}
+
+/** Puts a file or folder in the Trash. A test run, which must leave the Mac's Trash alone, just removes it. */
+const discard = (p) => (process.env.STORM_HEADLESS ? fs.rmSync(p, { recursive: true, force: true }) : shell.trashItem(p));
+
+/** Clears out images nothing points to any more. `refs` maps each storm to the image names it
+    still uses. Runs as the app opens, when no Undo could still bring one back. */
+async function sweepMedia(refs) {
+  if (!fs.existsSync(DIR)) return;
+  for (const entry of fs.readdirSync(DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !STORM_ID.test(entry.name)) continue; // only folders the app made
+    const dir = path.join(DIR, entry.name);
+    const keep = new Set(Array.isArray(refs?.[entry.name]) ? refs[entry.name] : []);
+    const files = fs.readdirSync(dir).filter((f) => !f.startsWith('.'));
+    if (!files.some((f) => keep.has(f))) {
+      if (files.every((f) => MEDIA_TYPES[path.extname(f).toLowerCase()])) await discard(dir);
+      continue;
+    }
+    for (const f of files) {
+      if (!keep.has(f) && MEDIA_TYPES[path.extname(f).toLowerCase()]) await discard(path.join(dir, f));
+    }
+  }
+}
+
+/** Puts one of a storm's images on the clipboard. The clipboard takes PNG: a PNG goes as it
+    is, and anything else is converted first. */
+async function copyImage(id, name) {
+  const file = mediaFile(id, name);
+  let png;
+  if (path.extname(name).toLowerCase() === '.png') {
+    png = fs.readFileSync(file);
+  } else {
+    const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) throw new Error('Unreadable image');
+    png = image.toPNG();
+  }
+  await clipboard.write([new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })]);
 }
 
 // ---------- wallpaper setting ----------
@@ -121,6 +187,14 @@ ipcMain.handle('clipboard:write', (_e, text) => (headless ? console.log('COPY ' 
 ipcMain.handle('post:open', (_e, text) => {
   const url = 'https://x.com/intent/post?text=' + encodeURIComponent(String(text));
   return headless ? console.log('OPEN ' + url) : shell.openExternal(url);
+});
+ipcMain.handle('media:add', (_e, id, ext, bytes) => addMedia(id, ext, bytes));
+ipcMain.handle('media:read', (_e, id, name) => ({ mime: MEDIA_TYPES[path.extname(String(name)).toLowerCase()], bytes: fs.readFileSync(mediaFile(id, name)) }));
+ipcMain.handle('media:copy', (_e, id, name) => (headless ? console.log('COPY-IMAGE ' + path.basename(mediaFile(id, name))) : copyImage(id, name)));
+ipcMain.handle('media:sweep', (_e, refs) => sweepMedia(refs));
+ipcMain.handle('media:trash', async (_e, id) => {
+  const dir = mediaDir(id);
+  if (fs.existsSync(dir)) await discard(dir);
 });
 ipcMain.handle('wallpaper:get', () => wallpaper());
 ipcMain.handle('wallpaper:choose', () => chooseWallpaper());

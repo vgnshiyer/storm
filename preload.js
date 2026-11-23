@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('api', {
   wallpaper: () => ipcRenderer.invoke('wallpaper:get'),
   chooseWallpaper: () => ipcRenderer.invoke('wallpaper:choose'),
   clearWallpaper: () => ipcRenderer.invoke('wallpaper:clear'),
+  addMedia: (id, ext, bytes) => ipcRenderer.invoke('media:add', id, ext, bytes),
+  readMedia: (id, name) => ipcRenderer.invoke('media:read', id, name),
+  copyImage: (id, name) => ipcRenderer.invoke('media:copy', id, name),
+  sweepMedia: (refs) => ipcRenderer.invoke('media:sweep', refs),
+  trashMedia: (id) => ipcRenderer.invoke('media:trash', id),
   openComposer: (text) => ipcRenderer.invoke('post:open', text),
   onMenu: (fn) => ipcRenderer.on('menu', (_e, action) => fn(action)),
 });

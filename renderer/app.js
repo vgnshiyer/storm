@@ -13,7 +13,8 @@ const tweetsEl = $('tweets');
 const statusEl = $('status');
 const measureEl = $('measure');
 
-/** @typedef {{id: string, name: string, tweets: string[], mtime: number, onDisk: boolean}} Storm */
+/** `media[i]` lists the images on tweet i, by file name in the storm's own folder.
+    @typedef {{id: string, name: string, tweets: string[], media: string[][], mtime: number, onDisk: boolean}} Storm */
 /** @type {Storm[]} Every storm on disk, plus any blank ones open in a tab. */
 let storms = [];
 /** @type {Storm[]} The storms open as tabs, left to right. */
@@ -30,9 +31,20 @@ let hasWallpaper = false;
 // A storm that has been given a name starts with it, as a `# Name` heading and a blank line.
 // An unnamed storm whose first words are `# ` has them stored as `\# `, so they are not read
 // back as a name.
+// A tweet's images follow its words, after a blank line, as Markdown image lines pointing
+// into the storm's folder: `![](storm-id/file.png)`. A line of the tweet's own that looks like
+// one is stored as `\![](…)`.
+
+const IMAGE_LINES = /(?:^|\n\n)((?:!\[\]\([^)\n]+\)(?:\n|$))+)$/;
 
 function serialize(s) {
-  const body = s.tweets.map((t) => t.replace(/^(\\*)---$/gm, '\\$1---')).join(SEP);
+  const body = s.tweets
+    .map((t, i) => {
+      const text = t.replace(/^(\\*)---$/gm, '\\$1---').replace(/^(\\*)!\[\]\(/gm, '\\$1![](');
+      const images = s.media[i].map((file) => `![](${s.id}/${file})`).join('\n');
+      return images && text ? `${text}\n\n${images}` : images || text;
+    })
+    .join(SEP);
   return (s.name ? `# ${s.name}\n\n${body}` : body.replace(/^(\\*)# /, '\\$1# ')) + '\n';
 }
 
@@ -46,7 +58,14 @@ function parse(text) {
   } else {
     body = body.replace(/^\\(\\*# )/, '$1');
   }
-  return { name, tweets: body.split(SEP).map((t) => t.replace(/^\\(\\*---)$/gm, '$1')) };
+  const media = [];
+  const tweets = body.split(SEP).map((chunk) => {
+    const images = IMAGE_LINES.exec(chunk);
+    media.push(images ? images[1].trim().split('\n').map((line) => line.slice(4, -1).split('/').pop()) : []);
+    const text = images ? chunk.slice(0, images.index) : chunk;
+    return text.replace(/^\\(\\*---)$/gm, '$1').replace(/^\\(\\*!\[\]\()/gm, '$1');
+  });
+  return { name, tweets, media };
 }
 
 const NAME_MAX = 80;
@@ -95,10 +114,11 @@ function measure(raw) {
 // ---------- helpers ----------
 
 /** Nothing written yet. The wallpaper, the resting buttons and the count go by this. */
-const isEmpty = (s) => s.tweets.every((t) => !t.trim());
+const hasContent = (s, i) => Boolean(s.tweets[i].trim() || s.media[i].length);
+const isEmpty = (s) => !s.tweets.some((_, i) => hasContent(s, i));
 /** Nothing to keep: no words and no name. Such a storm has no file and no place in the list. */
 const isBlank = (s) => isEmpty(s) && !s.name;
-const tweetCount = (s) => s.tweets.filter((t) => t.trim()).length;
+const tweetCount = (s) => s.tweets.filter((_, i) => hasContent(s, i)).length;
 const plural = (n) => `${n} tweet${n === 1 ? '' : 's'}`;
 
 /** A storm goes by its name, or failing that by its first line. */
@@ -133,7 +153,7 @@ function newId() {
 }
 
 function blankStorm() {
-  const s = { id: newId(), name: '', tweets: [''], mtime: Date.now(), onDisk: false };
+  const s = { id: newId(), name: '', tweets: [''], media: [[]], mtime: Date.now(), onDisk: false };
   storms.push(s);
   return s;
 }
@@ -182,7 +202,20 @@ function el(tag, className, text) {
 
 // ---------- saving ----------
 
+let flashUntil = 0;
+
+/** Says something in the status line for a moment, then lets it go back to what it was. */
+function flash(text) {
+  statusEl.classList.remove('error');
+  statusEl.textContent = text;
+  flashUntil = Date.now() + 2600;
+  setTimeout(() => {
+    if (Date.now() >= flashUntil) setStatus(dirty ? 'saving' : 'saved');
+  }, 2650);
+}
+
 function setStatus(state) {
+  if (state !== 'error' && Date.now() < flashUntil) return; // a message is up: it has the line for now
   statusEl.classList.toggle('error', state === 'error');
   if (state === 'error') statusEl.textContent = "Couldn't save. Keep this window open.";
   else if (!cur || isEmpty(cur)) statusEl.textContent = '';
@@ -251,7 +284,8 @@ const SORT_EDGE = 56; // px from the scroller's top or bottom where a drag start
 /** Lets `item` be dragged to a new place among its siblings, along a row ('x') or a column
     ('y'). The others slide aside to show where it will land; on release it settles there and
     `onDrop(from, to)` is told. A press that never travels is left alone, so clicks still work.
-    With a `scroller`, holding the drag near its top or bottom edge scrolls it. */
+    With a `scroller`, holding the drag near its edge (top or bottom for a column, left or
+    right for a row) scrolls it. */
 function startSort(e, item, { axis, scroller, onDrop }) {
   const list = [...item.parentElement.children];
   const from = list.indexOf(item);
@@ -265,7 +299,8 @@ function startSort(e, item, { axis, scroller, onDrop }) {
   const least = lead(rects[0]) - lead(rects[from]);
   const most = lead(rects.at(-1)) + size(rects.at(-1)) - lead(rects[from]) - size(rects[from]);
   const start = across ? e.clientX : e.clientY;
-  const scrolled = scroller ? scroller.scrollTop : 0;
+  const scrollAt = () => (across ? scroller.scrollLeft : scroller.scrollTop);
+  const scrolled = scroller ? scrollAt() : 0;
   let pointer = start;
   let to = from;
   let dragging = false;
@@ -280,7 +315,7 @@ function startSort(e, item, { axis, scroller, onDrop }) {
   };
 
   const place = () => {
-    const d = Math.max(least, Math.min(most, pointer - start + (scroller ? scroller.scrollTop - scrolled : 0)));
+    const d = Math.max(least, Math.min(most, pointer - start + (scroller ? scrollAt() - scrolled : 0)));
     item.style.transform = move(d);
     const head = lead(rects[from]) + d;
     const tail = head + size(rects[from]);
@@ -293,14 +328,17 @@ function startSort(e, item, { axis, scroller, onDrop }) {
     });
   };
 
-  // Near the scroller's top or bottom edge the page creeps along, faster the closer the pointer is.
+  // Near the scroller's edge it creeps along, faster the closer the pointer is.
   const creep = () => {
     frame = 0;
     if (!dragging) return;
     const box = scroller.getBoundingClientRect();
-    const over = Math.max(0, pointer - (box.bottom - SORT_EDGE)) - Math.max(0, box.top + SORT_EDGE - pointer);
+    const [near, far] = across ? [box.left, box.right] : [box.top, box.bottom];
+    const over = Math.max(0, pointer - (far - SORT_EDGE)) - Math.max(0, near + SORT_EDGE - pointer);
     if (over) {
-      scroller.scrollTop += Math.max(-16, Math.min(16, over / 4));
+      const by = Math.max(-16, Math.min(16, over / 4));
+      if (across) scroller.scrollLeft += by;
+      else scroller.scrollTop += by;
       place();
     }
     frame = requestAnimationFrame(creep);
@@ -718,6 +756,7 @@ async function deleteStorm(s) {
   try {
     if (s.onDisk) await window.api.remove(s.id);
     s.onDisk = false;
+    await window.api.trashMedia(s.id); // its images go to the Trash with it
   } catch {
     setStatus('error');
   }
@@ -809,7 +848,7 @@ function caretNow() {
   return i < 0 ? null : { i, start: areas[i].selectionStart, end: areas[i].selectionEnd };
 }
 
-const snapshot = () => ({ tweets: cur.tweets.slice(), caret: caretNow() });
+const snapshot = () => ({ tweets: cur.tweets.slice(), media: cur.media.map((m) => m.slice()), caret: caretNow() });
 
 /** Call just before changing the open storm, so the change can be undone. */
 function remember(snap = snapshot()) {
@@ -827,7 +866,7 @@ function noteTyping(i, inputType = '') {
   const kind = inputType.startsWith('delete') ? 'delete' : /^insert(Composition)?Text$/.test(inputType) ? 'type' : 'other';
   const now = Date.now();
   if (kind === 'other' || kind !== typing.kind || i !== typing.tweet || now - typing.at > TYPING_PAUSE) {
-    remember(beforeEdit ?? { tweets: cur.tweets.slice(), caret: null });
+    remember(beforeEdit ?? { ...snapshot(), caret: null });
   }
   typing = { at: now, tweet: i, kind };
   beforeEdit = null;
@@ -858,6 +897,7 @@ function stepHistory(back) {
   into.push(snapshot());
   const caret = (!back && caretAfter(cur.tweets, snap.tweets)) || snap.caret;
   cur.tweets = snap.tweets.slice();
+  cur.media = snap.media.map((m) => m.slice());
   typing.at = 0;
   renderTweets();
   const ta = caret && tweetsEl.children[caret.i]?.querySelector('textarea');
@@ -924,73 +964,107 @@ function paintBackdrop(backdrop, text, overAt, i) {
 // ---------- posting: hands the storm to X a tweet at a time ----------
 // The row of buttons under the storm becomes the posting controls while this is going on,
 // and writing is paused: the storm cannot be changed until posting is done or stopped.
-// The first tweet opens in X's own composer; after that each press of Copy next puts the
-// following tweet on the clipboard, to paste as the next post of the thread. Tweets already
-// handed over are ticked, and the one on the clipboard now is picked out, so it is always
-// plain which was pasted last.
+// The first tweet opens in X's own composer; after that each press of Copy next, and only a
+// press, puts the next thing on the clipboard, to paste into the thread: a tweet's words, then each of its
+// images. Tweets already handed over are ticked, and the tweet (and image) on the clipboard
+// now is picked out, so it is always plain which was pasted last.
 
-/** `order` lists the tweets that have words, by index; `at` is the place in it of the tweet
-    in hand; `done` holds the places already handed over. */
-const post = { on: false, order: [], at: -1, done: new Set(), size: 0 };
+/** `order` lists the tweets that have something in them, by index. `steps` is everything to be
+    handed over, in turn: a tweet's words, then each of its images. `step` is the one in hand
+    (-1 before the first), and `busy` is set while one is on its way to the clipboard. */
+const post = { on: false, order: [], steps: [], step: -1, size: 0, busy: false };
 
 function markPosting() {
+  const now = post.on ? post.steps[post.step] ?? null : null;
+  const at = now ? now.place : -1; // the place of the tweet in hand
   [...tweetsEl.children].forEach((row, i) => {
     const place = post.on ? post.order.indexOf(i) : -1;
-    const done = place >= 0 && post.done.has(place);
+    const done = place >= 0 && place < at;
     row.classList.toggle('posted', done);
-    row.classList.toggle('posting-now', place >= 0 && place === post.at);
+    row.classList.toggle('posting-now', place >= 0 && place === at);
     const num = row.querySelector('.num');
     if (done && !num.firstChild) num.append(icon(CHECK_ICON, 12, 24));
     else if (!done) num.replaceChildren();
+    for (const shot of row.querySelectorAll('.shot')) {
+      shot.classList.toggle('now', Boolean(now) && place === now.place && shot.dataset.file === now.file);
+    }
     // Writing is paused while posting: the words can be read and copied, not changed.
     const ta = row.querySelector('textarea');
     ta.readOnly = post.on;
     ta.tabIndex = post.on ? -1 : 0;
   });
   if (!post.on) return;
-  const last = post.at >= post.order.length - 1;
-  $('post-count').textContent = `${post.done.size + 1}/${post.order.length}`;
-  $('post-next-label').textContent = last ? 'Done' : 'Copy next';
+  const images = now ? cur.media[post.order[at]] : [];
+  const nth = now?.file ? images.indexOf(now.file) + 1 : 0;
+  $('post-count').textContent = `${at + 1}/${post.order.length}` + (nth ? ` · image ${nth}/${images.length}` : '');
+  $('post-next-label').textContent = post.busy ? 'Copying…' : post.step >= post.steps.length - 1 ? 'Done' : 'Copy next';
 }
 
-/** Takes up the tweet at `place` in the order: the one before it is ticked off. */
-function handOver(place) {
-  if (post.at >= 0 && post.at !== place) post.done.add(post.at);
-  post.done.delete(place);
-  post.at = place;
+/** Makes `step` the one in hand: every tweet before its tweet is ticked off. */
+function goTo(step) {
+  post.step = step;
   markPosting();
-  tweetsEl.children[post.order[place]]?.scrollIntoView({ block: 'nearest' });
+  tweetsEl.children[post.order[post.steps[step].place]]?.scrollIntoView({ block: 'nearest' });
+}
+
+/** Puts a step on the clipboard: a tweet's words, or one of its images. */
+function copyStep(step) {
+  const { place, file } = post.steps[step];
+  return file ? window.api.copyImage(cur.id, file) : window.api.copy(cur.tweets[post.order[place]].trim());
+}
+
+/** A tweet copied by its own button while posting: carry on from its words. */
+function takeUp(i) {
+  const step = post.steps.findIndex((s) => post.order[s.place] === i && !s.file);
+  if (step >= 0) goTo(step);
 }
 
 async function startPosting() {
   if (!cur || isEmpty(cur) || post.on) return;
   closeFind(false);
   post.on = true;
-  post.order = cur.tweets.flatMap((text, i) => (text.trim() ? [i] : []));
+  post.order = cur.tweets.flatMap((_, i) => (hasContent(cur, i) ? [i] : []));
+  post.steps = post.order.flatMap((i, place) => [
+    ...(cur.tweets[i].trim() ? [{ place, file: null }] : []),
+    ...cur.media[i].map((file) => ({ place, file })),
+  ]);
   post.size = cur.tweets.length;
-  post.done = new Set();
-  post.at = -1;
+  post.busy = false;
   document.body.classList.add('posting');
-  handOver(0);
+  // The composer opens with the first tweet's words in it, so those are in hand from the
+  // start. Nothing goes on the clipboard until Copy next is pressed. A first tweet that is
+  // only images has no words to send, so nothing is in hand yet.
+  const first = post.steps[0];
+  post.step = first.file ? -1 : 0;
+  markPosting();
   $('post-next').focus();
-  await window.api.openComposer(cur.tweets[post.order[0]].trim());
-  if (post.on && post.order.length > 1) copyNext(); // the second is ready to paste as soon as X is open
+  await window.api.openComposer(first.file ? '' : cur.tweets[post.order[0]].trim());
 }
 
-/** Puts the following tweet on the clipboard, or ends once the last one has gone. */
+/** Puts the following step on the clipboard, or ends once the last one has gone. Only ever
+    on being asked: one press, one copy. A press that lands while a copy is still on its way
+    is let go, so nothing is copied twice or skipped. */
 async function copyNext() {
-  if (!post.on) return;
-  if (post.at >= post.order.length - 1) return stopPosting();
-  const place = post.at + 1;
-  await window.api.copy(cur.tweets[post.order[place]].trim());
-  if (post.on) handOver(place);
+  if (!post.on || post.busy) return;
+  if (post.step >= post.steps.length - 1) return stopPosting();
+  const step = post.step + 1;
+  post.busy = true;
+  goTo(step); // shows at once which one is being copied
+  try {
+    await copyStep(step);
+  } catch {
+    flash("Couldn't copy that image");
+  }
+  post.busy = false;
+  if (post.on) markPosting();
 }
 
 function stopPosting() {
   if (!post.on) return;
   post.on = false;
-  post.at = -1;
-  post.done = new Set();
+  post.busy = false;
+  post.step = -1;
+  post.steps = [];
   document.body.classList.remove('posting');
   markPosting();
   // Writing picks up again at the end of the storm, unless the caret is in some other field.
@@ -1006,6 +1080,7 @@ window.addEventListener(
     if (e.key !== 'Enter' && e.key !== 'Escape') return;
     e.preventDefault();
     e.stopPropagation();
+    if (e.repeat) return; // a held key is one press
     if (e.key === 'Enter') copyNext();
     else stopPosting();
   },
@@ -1121,7 +1196,7 @@ function buildTweet(i) {
   const ta = el('textarea', 'text');
   ta.rows = 1;
   ta.spellcheck = true;
-  ta.placeholder = i === 0 ? 'Start your storm…' : 'Keep writing…';
+  ta.placeholder = i === 0 ? 'Start typing…' : 'Keep writing…';
   ta.value = cur.tweets[i];
   field.append(backdrop, ta);
 
@@ -1141,7 +1216,16 @@ function buildTweet(i) {
   copy.setAttribute('aria-label', 'Copy tweet');
   copy.append(icon(COPY_ICON, 14, 24));
   gutter.append(el('div', 'count'), el('div', 'excess'));
-  row.append(num, field, copy, gutter);
+  row.append(num, field, copy, gutter, el('div', 'media'));
+  renderMedia(row, i);
+
+  // An image pasted into a tweet is attached to it.
+  ta.addEventListener('paste', (e) => {
+    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    attach(i, files);
+  });
 
   ta.addEventListener('beforeinput', () => {
     beforeEdit = snapshot();
@@ -1156,7 +1240,7 @@ function buildTweet(i) {
   ta.addEventListener('keydown', (e) => onKey(e, ta, i));
   copy.addEventListener('click', async () => {
     await window.api.copy(cur.tweets[i].trim());
-    if (post.on && post.order.includes(i)) handOver(post.order.indexOf(i)); // copied by hand: posting carries on from here
+    if (post.on) takeUp(i); // copied by hand: posting carries on from here
     copy.replaceChildren(icon(CHECK_ICON, 14, 24)); // a tick, for a moment, to say it worked
     setTimeout(() => copy.replaceChildren(icon(COPY_ICON, 14, 24)), 1200);
   });
@@ -1178,11 +1262,136 @@ function refreshTweet(row, i) {
   row.querySelector('.copy').hidden = !text.trim();
 }
 
+// ---------- images on a tweet ----------
+// Drop an image on a tweet, or paste one into it, and a copy is kept in the storm's folder
+// and shown under the tweet's words. X takes up to four on a post.
+
+const MEDIA_MAX = 4;
+const IMAGE_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+/** Images already read from disk, as page URLs, by `storm/file`. */
+const mediaUrls = new Map();
+
+function mediaUrl(id, file) {
+  const key = `${id}/${file}`;
+  if (!mediaUrls.has(key)) {
+    mediaUrls.set(
+      key,
+      window.api.readMedia(id, file).then(({ mime, bytes }) => URL.createObjectURL(new Blob([bytes], { type: mime })))
+    );
+  }
+  return mediaUrls.get(key);
+}
+
+function renderMedia(row, i) {
+  const storm = cur;
+  row.querySelector('.media').replaceChildren(
+    ...storm.media[i].map((file, k) => {
+      const shot = el('div', 'shot');
+      shot.dataset.file = file;
+      const img = el('img');
+      img.alt = '';
+      img.draggable = false;
+      mediaUrl(storm.id, file).then(
+        (url) => (img.src = url),
+        () => shot.classList.add('missing') // the file has gone from the folder
+      );
+      const remove = el('button', 'shot-remove');
+      remove.type = 'button';
+      remove.dataset.tip = 'Remove image';
+      remove.setAttribute('aria-label', 'Remove image');
+      remove.append(icon('M18 6L6 18M6 6l12 12', 12, 24));
+      remove.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it is
+      remove.addEventListener('click', () => {
+        hideTip();
+        remember();
+        cur.media[i].splice(k, 1);
+        renderMedia(row, i);
+        touch();
+      });
+      shot.append(img, remove);
+      // With more than one image, each can be dragged along the row into a new order.
+      shot.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it is
+      shot.addEventListener('pointerdown', (e) => {
+        if (post.on || remove.contains(e.target)) return;
+        startSort(e, shot, {
+          axis: 'x',
+          scroller: shot.parentElement,
+          onDrop: (from, to) => {
+            remember();
+            cur.media[i].splice(to, 0, ...cur.media[i].splice(from, 1));
+            renderMedia(row, i);
+            touch();
+          },
+        });
+      });
+      return shot;
+    })
+  );
+}
+
+/** Attaches image files to tweet i, as many as it still has room for. */
+async function attach(i, files) {
+  if (!cur || post.on) return;
+  const storm = cur;
+  const images = [...files].filter((f) => IMAGE_EXT[f.type]);
+  if (!images.length) return flash('Only images can be added');
+  const room = MEDIA_MAX - storm.media[i].length;
+  if (room <= 0) return flash(`A tweet takes up to ${MEDIA_MAX} images`);
+  const names = [];
+  try {
+    for (const f of images.slice(0, room)) {
+      names.push(await window.api.addMedia(storm.id, IMAGE_EXT[f.type], new Uint8Array(await f.arrayBuffer())));
+    }
+  } catch {
+    return flash("Couldn't add that image");
+  }
+  if (storm !== cur || !storm.media[i]) return; // the storm was put away, or the tweet went, while the files were copied
+  remember();
+  storm.media[i].push(...names);
+  renderMedia(tweetsEl.children[i], i);
+  touch();
+  if (images.length > room) flash(`A tweet takes up to ${MEDIA_MAX} images`);
+}
+
+// A file dropped anywhere in the window must never replace the app with itself.
+const carriesFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+for (const type of ['dragover', 'drop']) {
+  window.addEventListener(type, (e) => {
+    if (carriesFiles(e)) e.preventDefault();
+  });
+}
+
+// The tweet under a dragged image is picked out, and takes it when it is let go.
+let dropRow = null;
+function setDropRow(row) {
+  if (row === dropRow) return;
+  dropRow?.classList.remove('drop');
+  dropRow = row;
+  row?.classList.add('drop');
+}
+tweetsEl.addEventListener('dragover', (e) => {
+  if (!carriesFiles(e) || post.on) return;
+  const row = e.target.closest('.tweet');
+  setDropRow(row);
+  if (row) e.dataTransfer.dropEffect = 'copy';
+});
+tweetsEl.addEventListener('dragleave', (e) => {
+  if (!tweetsEl.contains(e.relatedTarget)) setDropRow(null);
+});
+tweetsEl.addEventListener('drop', (e) => {
+  const row = dropRow;
+  setDropRow(null);
+  if (!row || !carriesFiles(e)) return;
+  e.preventDefault();
+  attach([...tweetsEl.children].indexOf(row), e.dataTransfer.files);
+});
+
 /** Takes a tweet out of the storm and leaves the caret at the end of the one before it. */
 function deleteTweet(i) {
   if (cur.tweets.length < 2) return;
   remember();
   cur.tweets.splice(i, 1);
+  cur.media.splice(i, 1);
   renderTweets();
   focusTweet(Math.max(0, i - 1), Infinity);
   touch();
@@ -1196,6 +1405,7 @@ function moveTweet(from, to) {
   remember();
   stopPosting(); // the order has changed under it
   cur.tweets.splice(to, 0, ...cur.tweets.splice(from, 1));
+  cur.media.splice(to, 0, ...cur.media.splice(from, 1));
   renderTweets();
   if (selection) {
     const ta = tweetsEl.children[movedIndex(held, from, to)].querySelector('textarea');
@@ -1231,6 +1441,7 @@ function splitTweet(ta, i) {
   remember();
   const text = ta.value;
   cur.tweets.splice(i, 1, text.slice(0, ta.selectionStart).trimEnd(), text.slice(ta.selectionEnd).trimStart());
+  cur.media.splice(i + 1, 0, []); // the images stay with the first half
   renderTweets();
   focusTweet(i + 1, 0);
   unfold(tweetsEl.children[i + 1]);
@@ -1265,6 +1476,7 @@ function mergeUp(i) {
   const b = cur.tweets[i];
   const joiner = a && b && !/\s$/.test(a) && !/^\s/.test(b) ? ' ' : '';
   cur.tweets.splice(i - 1, 2, a + joiner + b);
+  cur.media.splice(i - 1, 2, [...cur.media[i - 1], ...cur.media[i]]);
   renderTweets();
   focusTweet(i - 1, a.length);
   touch();
@@ -1588,6 +1800,8 @@ setInterval(renderList, 60e3);
 
   const files = await window.api.list();
   storms = files.map((f) => ({ id: f.id, ...parse(f.text), mtime: f.mtime, onDisk: true }));
+  // Images no storm points to any more are cleared out now, before any Undo could want them back.
+  window.api.sweepMedia(Object.fromEntries(storms.map((s) => [s.id, s.media.flat()])));
 
   // Reopen the tabs from last time; failing that, the most recent storm, or a blank one.
   let saved = {};
