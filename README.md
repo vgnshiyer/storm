@@ -7,6 +7,8 @@
 
 <p align="center">A quiet Mac app for writing tweet storms and keeping them.</p>
 
+<p align="center"><img src="assets/screenshot.png" alt="A thread about a book, written in Storm: two numbered tweets, an image on the first, a character count beside each, and the list of storms in the sidebar" /></p>
+
 A storm is a list of tweets. You write them one after another, see at a glance which run past 280 characters, and post them to X a tweet at a time. Every storm is a plain Markdown file in your Documents folder, so nothing is locked inside the app.
 
 ## Run it
