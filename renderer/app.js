@@ -1852,21 +1852,43 @@ function resetNote(s, note) {
     is kept for the tweet in place of the one before. */
 async function sendAsk(s, note, label, ask = label) {
   const key = `ask-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  Object.assign(note, { phase: 'waiting', question: label, ask, key, error: '' });
+  Object.assign(note, { phase: 'waiting', question: label, ask, key, error: '', partial: '' });
   keepAsk(label);
   paintNote(s, noteAt(s, note), true);
   backToTweet(s, note);
-  const done = await window.api.ask(key, askRequest(s, noteAt(s, note), ask));
+  asksOut.set(key, { s, note });
+  const done = await window.api.ask(key, askRequest(s, noteAt(s, note), ask)).finally(() => asksOut.delete(key));
   if (done.cancelled || note.key !== key || noteAt(s, note) < 0) return; // called off, or its tweet is gone
-  note.key = null;
+  const shown = Boolean(note.partial); // its words are on the page already: they are not brought in again
+  Object.assign(note, { key: null, partial: '' });
   if (done.ok) {
     Object.assign(note, { phase: 'done', saved: { question: label, reply: done.text, model: done.model || '' } });
     keepNotes(s);
   } else {
     Object.assign(note, { phase: 'failed', error: done.error });
   }
-  paintNote(s, noteAt(s, note), true);
+  paintNote(s, noteAt(s, note), !shown || !done.ok);
 }
+
+// A reply's words as they arrive. They take the place of the waiting line in the note, which
+// then grows with them; the note is kept in view only if its foot was in view before.
+const asksOut = new Map(); // the questions that are out: request key → { s, note }
+window.api.onAskText((key, text) => {
+  const asked = asksOut.get(key);
+  if (!asked || asked.note.key !== key || asked.note.phase !== 'waiting') return;
+  const { s, note } = asked;
+  note.partial = text;
+  const box = s === cur && note.open && tweetsEl.children[noteAt(s, note)]?.querySelector(':scope > .note');
+  if (!box) return;
+  const inView = box.getBoundingClientRect().bottom <= $('scroll').getBoundingClientRect().bottom + 1;
+  let reply = box.querySelector('.note-reply');
+  if (!reply) {
+    reply = el('div', 'note-reply');
+    box.querySelector('.note-line')?.replaceWith(reply);
+  }
+  reply.replaceChildren(...replyBlocks(text));
+  if (inView) box.scrollIntoView({ block: 'nearest' });
+});
 
 /** The reply as it is read: paragraphs, and any wording the model offered ("> …") set apart in
     a block of its own with a button to copy it. Words in double quotes are the model pointing
@@ -1954,7 +1976,11 @@ function buildNote(s, note) {
   const head = el('div', 'note-head');
   head.append(el('span', 'note-ask', done ? note.saved.question : note.question), el('span', 'note-model', done ? note.saved.model.toLowerCase() : ''), acts);
   box.append(head);
-  if (note.phase === 'waiting') {
+  if (note.phase === 'waiting' && note.partial) {
+    const reply = el('div', 'note-reply');
+    reply.append(...replyBlocks(note.partial));
+    box.append(reply);
+  } else if (note.phase === 'waiting') {
     const line = el('div', 'note-line');
     line.append(aiWaiting(), el('span', '', 'Waiting for a reply…'));
     box.append(line);
@@ -2078,22 +2104,12 @@ function currentEffect() {
 Wallpaper.setEffect(currentEffect());
 
 function renderEffects() {
-  const now = currentEffect();
-  $('wallpaper-effects').replaceChildren(
-    ...EFFECTS.map(([id, name]) => {
-      const option = el('button', id === now ? 'current' : '', name);
-      option.type = 'button';
-      option.disabled = !hasWallpaper; // nothing to draw without an image
-      option.setAttribute('role', 'radio');
-      option.setAttribute('aria-checked', String(id === now));
-      option.addEventListener('click', () => {
-        localStorage.setItem('wallpaper-effect', id);
-        Wallpaper.setEffect(id);
-        renderEffects();
-      });
-      return option;
-    })
-  );
+  // Nothing to draw without an image, so nothing to choose.
+  segmented('wallpaper-effects', EFFECTS.map(([id, name]) => [id, name, !hasWallpaper]), currentEffect(), (id) => {
+    localStorage.setItem('wallpaper-effect', id);
+    Wallpaper.setEffect(id);
+    renderEffects();
+  });
 }
 
 function updateWall() {
@@ -2221,21 +2237,59 @@ function renderSettings() {
 
 // ---------- settings: General ----------
 
-/** Fills a segmented control: `options` are [value, label], `current` the one chosen. */
+/** Draws a segmented control: `options` are [value, label, off] (`off`: out of reach),
+    `current` the one chosen, and `choose(value)` what pressing one does. The fill behind the
+    chosen option is a piece of its own, which slides from the old choice to the new. Drawn
+    again with the same options, the control keeps its buttons and only moves the fill. */
 function segmented(id, options, current, choose) {
-  $(id).replaceChildren(
-    ...options.map(([value, label]) => {
-      const option = el('button', value === current ? 'current' : '', label);
-      option.type = 'button';
-      option.setAttribute('role', 'radio');
-      option.setAttribute('aria-checked', String(value === current));
-      option.addEventListener('click', () => {
-        choose(value);
-        renderGeneral();
-      });
-      return option;
-    })
-  );
+  const box = $(id);
+  const labels = options.map(([, label]) => label).join('\n');
+  if (box.dataset.options !== labels) {
+    box.dataset.options = labels;
+    box.replaceChildren(
+      el('span', 'segmented-fill'),
+      ...options.map(([, label], k) => {
+        const option = el('button', '', label);
+        option.type = 'button';
+        option.setAttribute('role', 'radio');
+        option.addEventListener('click', () => box.pick(k));
+        return option;
+      })
+    );
+    // A control drawn while its page is put away has no sizes yet: the fill finds its place
+    // when the page is shown, and follows if the buttons change size.
+    box.watch ??= new ResizeObserver(() => placeFill(box));
+    box.watch.observe(box);
+  }
+  box.pick = (k) => choose(options[k][0]);
+  [...box.querySelectorAll('button')].forEach((option, k) => {
+    const [value, , off] = options[k];
+    option.classList.toggle('current', value === current);
+    option.setAttribute('aria-checked', String(value === current));
+    option.disabled = Boolean(off);
+  });
+  placeFill(box);
+}
+
+/** Puts a segmented control's fill behind its chosen option. It slides there, unless it was
+    not on show before: then it is simply there. A choice that is out of reach has no fill. */
+function placeFill(box) {
+  const fill = box.querySelector('.segmented-fill');
+  const chosen = box.querySelector('button.current:not(:disabled)');
+  const shown = Boolean(chosen) && box.offsetWidth > 0;
+  fill.classList.toggle('away', !shown);
+  if (!shown) {
+    box.placed = false;
+    return;
+  }
+  if (!box.placed) fill.style.transition = 'none';
+  fill.style.width = chosen.offsetWidth + 'px';
+  fill.style.transform = `translateX(${chosen.offsetLeft}px)`;
+  if (!box.placed) {
+    fill.getBoundingClientRect(); // takes its place before it may move again
+    fill.style.transition = '';
+    box.placed = true;
+  }
 }
 
 function renderGeneral() {
@@ -2243,10 +2297,12 @@ function renderGeneral() {
   segmented('limits', LIMITS.map((n) => [n, n.toLocaleString('en-US')]), LIMIT, (n) => {
     LIMIT = n;
     localStorage.setItem('limit', String(n));
+    renderGeneral();
   });
   segmented('text-sizes', TEXT_SIZES.map(([id, name]) => [id, name]), applyTextSize(), (id) => {
     localStorage.setItem('text-size', id);
     applyTextSize();
+    renderGeneral();
   });
 }
 
@@ -2309,9 +2365,13 @@ function aiButton(label, onClick) {
   return button;
 }
 
-// Lucide "refresh-cw" and "log-out".
+// Lucide "refresh-cw", "log-out" and "pencil".
 const RECONNECT_ICON = 'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5';
 const DISCONNECT_ICON = 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9';
+const EDIT_ICON = 'M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5zM15 5l4 4';
+
+/** What a model added by its address is, in a line: the model, and where it is reached. */
+const apiWords = (p) => `${p.models[0]?.name || p.model}, ${p.local ? 'on this Mac' : p.hasKey ? 'with your API key' : `at ${p.host}`}.`;
 
 /** Puts the small menu by a button on the AI page, its right edge on the button's: under
     the button, or over it when there is no room below. The menu is not on screen yet, so its
@@ -2344,7 +2404,7 @@ function renderAI() {
     ...ai.providers.map((p) => {
       const row = el('div', 'settings-row');
       const words = el('div');
-      words.append(el('div', 'row-title', p.name), el('div', 'row-help', `Your ${p.name} subscription, through ${p.tool}.`));
+      words.append(el('div', 'row-title', p.name), el('div', 'row-help', p.api ? apiWords(p) : `Your ${p.name} subscription, through ${p.tool}.`));
       const actions = el('div', 'row-actions');
       const state = aiState(p);
       if (state) actions.append(el('span', 'row-state', state));
@@ -2377,26 +2437,50 @@ function renderAI() {
             renderAI();
           });
           disconnect.classList.add('danger');
-          placeAiMenu(more, menuItem(RECONNECT_ICON, 'Reconnect', () => connectAI(p.id)), disconnect);
+          placeAiMenu(more, p.api ? menuItem(EDIT_ICON, 'Edit', () => addModel(p)) : menuItem(RECONNECT_ICON, 'Reconnect', () => connectAI(p.id)), disconnect);
         });
         actions.append(toggle, more);
       }
       row.append(words, actions);
       return row;
-    })
+    }),
+    addRow()
   );
 
   // The model: one of those the switched-on connections offer.
   const offering = ai.providers.filter((p) => p.enabled && p.models.length);
   $('ai-model').disabled = !offering.length; // nothing to choose from without a connection
   $('ai-model-name').textContent = offering.length && ai.model ? ai.model.name : 'No connection';
+
+  // Reasoning: how hard the model in use thinks. A level it does not take cannot be chosen;
+  // a model that takes none leaves the whole choice out of reach.
+  const chosen = ai.levels.includes(ai.effort) ? ai.effort : null;
+  $('ai-effort-help').textContent = ai.levels.length || !ai.model ? 'How much the model thinks before it replies.' : 'Not available for this model.';
+  const levels = [[null, 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
+  segmented('ai-effort', levels.map(([level, label]) => [level, label, !ai.levels.length || (level !== null && !ai.levels.includes(level))]), chosen, async (level) => {
+    ai = await window.api.aiEffort(level);
+    renderAI();
+  });
+}
+
+/** The last row of the connections: the way to a model reached by its address. */
+function addRow() {
+  const row = el('div', 'settings-row');
+  const words = el('div');
+  words.append(el('div', 'row-title', 'Another model'), el('div', 'row-help', 'With an API key, or running on this Mac.'));
+  const actions = el('div', 'row-actions');
+  actions.append(aiButton('Add', () => addModel()));
+  row.append(words, actions);
+  return row;
 }
 
 // The model menu: each switched-on connection's models under its name, the one in use ticked.
+// Models added from the same place stand under one heading.
 opensAiMenu($('ai-model'), (button) => {
   const items = [];
+  let heading = null;
   for (const p of ai.providers.filter((x) => x.enabled && x.models.length)) {
-    items.push(el('div', 'picker-label', p.name));
+    if (p.name !== heading) items.push(el('div', 'picker-label', (heading = p.name)));
     for (const m of p.models) {
       const chosen = ai.model?.provider === p.id && ai.model.id === m.id;
       const item = menuItem(CHECK_ICON, m.name, async () => {
@@ -2486,6 +2570,8 @@ function renderConnecting() {
   const { phase } = run;
   $('ai-dialog-title').textContent = `Connect ${p.name}`;
   $('ai-dialog-sub').textContent = `Use your own ${p.name} subscription, through ${p.tool}.`;
+  $('ai-dialog').classList.remove('adding');
+  $('ai-dialog-go').hidden = true;
 
   const tool =
     phase === 'looking'
@@ -2516,11 +2602,181 @@ function renderConnecting() {
   $('ai-dialog-close').textContent = phase === 'done' ? 'Done' : 'Cancel';
 }
 
+// ---------- adding a model by its address ----------
+// The same dialog, as a form: an address (typed, or one of the ready-made ones), an API key
+// if the address wants one, and the model's name, with the models the address lists offered
+// under the field as it is typed. Connect sends one short message; a reply adds the model.
+
+/** The form that is open: what is typed, the models offered, and where the check stands
+    ('form', 'checking', 'done' or 'failed'). */
+let adding = null;
+const LOCAL_ADDRESS = /^(https?:\/\/)?(localhost|127\.|0\.0\.0\.0|\[::1\])/i;
+
+/** A field of the form: its name, then a box to type in. */
+function apiField(name, placeholder, type = 'text') {
+  const field = el('label', 'api-field');
+  const box = el('span', 'ask-field');
+  const input = el('input', 'ask-input');
+  input.type = type;
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.placeholder = placeholder;
+  box.append(input);
+  field.append(el('span', 'api-field-name', name), box);
+  return { field, input };
+}
+
+/** Opens the form: empty, or holding a model already added (`held`), whose key stays kept
+    unless another is typed. */
+function addModel(held = null) {
+  if (connecting) window.api.cancelAsk(connecting.key);
+  connecting = null;
+  const run = (adding = { key: `add-${Date.now()}`, id: held?.id, phase: 'form', models: [], listedFor: null, picked: -1 });
+  const live = () => adding === run;
+
+  $('ai-dialog-title').textContent = held ? `Edit ${held.name}` : 'Add a model';
+  $('ai-dialog-sub').textContent = 'With an API key, or running on this Mac.';
+  $('ai-dialog').classList.add('adding');
+
+  const presets = el('div', 'api-presets');
+  const address = apiField('Address', 'https://example.com/v1');
+  const key = apiField('API key', '', 'password');
+  const model = apiField('Model', 'Its name');
+  const list = el('div', 'ask-list api-models');
+  const check = el('div', 'api-check');
+  address.input.value = held?.url || '';
+  model.input.value = held?.model || '';
+  $('ai-dialog-steps').replaceChildren(presets, address.field, key.field, model.field, list, check);
+
+  const go = $('ai-dialog-go');
+  const draft = () => ({ id: run.id, url: address.input.value.trim(), key: key.input.value.trim(), model: model.input.value.trim() });
+  /** The key already kept counts for as long as the address is the one it was given for. */
+  const keyKept = () => Boolean(held?.hasKey) && draft().url.replace(/\/+$/, '') === held.url;
+
+  let shown = [];
+  const draw = () => {
+    const { url, model: typed } = draft();
+    key.input.placeholder = keyKept() ? 'Kept in the Keychain' : LOCAL_ADDRESS.test(url) ? 'Not needed on this Mac' : '';
+    const low = typed.toLowerCase();
+    const exact = run.models.some((m) => m.id.toLowerCase() === low);
+    shown = run.phase === 'done' || exact ? [] : run.models.filter((m) => !low || m.id.toLowerCase().includes(low) || m.name.toLowerCase().includes(low));
+    run.picked = Math.max(-1, Math.min(run.picked, shown.length - 1));
+    list.replaceChildren(
+      ...shown.map((m, k) => {
+        const item = el('button', 'ask-item' + (k === run.picked ? ' picked' : ''), m.id);
+        item.type = 'button';
+        item.tabIndex = -1;
+        item.addEventListener('click', () => pick(m));
+        return item;
+      })
+    );
+    list.hidden = !shown.length;
+    list.querySelector('.picked')?.scrollIntoView({ block: 'nearest' });
+
+    const { phase } = run;
+    check.replaceChildren(
+      phase === 'checking'
+        ? aiStep('busy', 'Connection', 'Waiting for a reply…')
+        : phase === 'failed'
+          ? aiStep('failed', 'Connection', run.error)
+          : phase === 'done'
+            ? aiStep('done', 'Connection', `${run.asked} replied in ${(run.ms / 1000).toFixed(1)} s.`)
+            : aiStep('todo', 'Connection', 'One short message, to check it answers.')
+    );
+    go.hidden = phase === 'done';
+    go.disabled = phase === 'checking' || !url || !typed; // nothing to connect without an address and a model
+    $('ai-dialog-close').textContent = phase === 'done' ? 'Done' : 'Cancel';
+  };
+  const pick = (m) => {
+    model.input.value = m.id;
+    run.picked = -1;
+    edited();
+    model.input.focus();
+  };
+  /** Anything typed after a check puts the check back to be done. */
+  const edited = () => {
+    if (run.phase !== 'checking') run.phase = 'form';
+    draw();
+  };
+
+  /** Asks the address for its models, once for each address and key. Quietly: an address
+      that will not say only leaves the model to be typed in full. */
+  const listModels = async () => {
+    const { url, key: typedKey } = draft();
+    const asked = `${url}\n${typedKey}`;
+    if (!url || run.listedFor === asked) return;
+    run.listedFor = asked;
+    window.api.cancelAsk(run.key + '-list');
+    const reply = await window.api.aiEndpointModels(run.key + '-list', draft());
+    if (!live() || run.listedFor !== asked || reply.cancelled) return;
+    run.models = reply.ok ? reply.models : [];
+    draw();
+  };
+
+  const connect = async () => {
+    if (go.disabled || go.hidden) return;
+    const sent = draft();
+    Object.assign(run, { phase: 'checking', asked: sent.model, picked: -1 });
+    draw();
+    const reply = await window.api.aiSaveEndpoint(run.key, sent);
+    if (!live() || reply.cancelled) return;
+    Object.assign(run, { phase: reply.ok ? 'done' : 'failed', ms: reply.ms, error: reply.error });
+    draw();
+    if (reply.ok) refreshAI();
+  };
+  go.onclick = connect;
+
+  presets.append(
+    ...ai.presets.map((preset) => {
+      const chip = el('button', 'ask-chip', preset.name);
+      chip.type = 'button';
+      chip.addEventListener('click', () => {
+        if (address.input.value.trim() !== preset.url) model.input.value = ''; // another place, other models
+        address.input.value = preset.url;
+        run.models = [];
+        edited();
+        (LOCAL_ADDRESS.test(preset.url) || keyKept() ? model : key).input.focus();
+      });
+      return chip;
+    })
+  );
+  list.addEventListener('mousedown', (e) => e.preventDefault()); // a click on a model leaves the field its caret
+  for (const { input } of [address, key, model]) {
+    input.addEventListener('input', () => {
+      if (input !== model.input) run.models = []; // they were another address's, or another key's
+      run.picked = -1;
+      edited();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (input === model.input && run.picked >= 0) pick(shown[run.picked]);
+        else connect();
+      } else if (input === model.input && shown.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        run.picked = Math.max(-1, Math.min(run.picked + (e.key === 'ArrowDown' ? 1 : -1), shown.length - 1));
+        draw();
+      }
+    });
+  }
+  model.input.addEventListener('focus', listModels);
+
+  draw();
+  if (!$('ai-dialog').open) $('ai-dialog').showModal();
+  (held ? model : address).input.focus();
+}
+
 // Closing the dialog, by its button or Escape, calls off whatever it was waiting for.
 $('ai-dialog-close').addEventListener('click', () => $('ai-dialog').close());
 $('ai-dialog').addEventListener('close', () => {
   if (connecting) window.api.cancelAsk(connecting.key);
   connecting = null;
+  if (adding) {
+    window.api.cancelAsk(adding.key);
+    window.api.cancelAsk(adding.key + '-list');
+  }
+  adding = null;
   if (sectionId === 'ai') refreshAI();
 });
 

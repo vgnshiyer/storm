@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, clipboard, ClipboardItem, shell, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, clipboard, ClipboardItem, shell, dialog, nativeImage, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const ai = require('./ai');
@@ -8,7 +8,10 @@ const ai = require('./ai');
 // app's own state beside it, so a test run never touches the real storms or settings.
 const DEFAULT_DIR = path.join(app.getPath('documents'), 'Storms');
 let DIR = process.env.STORM_DIR || DEFAULT_DIR;
-if (process.env.STORM_DIR) app.setPath('userData', path.join(DIR, '.userdata'));
+if (process.env.STORM_DIR) {
+  app.setPath('userData', path.join(DIR, '.userdata'));
+  app.setName('Storm Test'); // and its own entry in the Keychain, not the app's
+}
 
 // ---------- storms ----------
 
@@ -255,42 +258,100 @@ ipcMain.handle('wallpaper:get', () => wallpaper());
 ipcMain.handle('wallpaper:choose', () => chooseWallpaper());
 ipcMain.handle('wallpaper:clear', () => setWallpaper({ kind: 'none' }));
 // AI. settings.json's `ai` holds the connections that have been made and the model chosen:
-// { connections: { claude: { enabled }, … }, model: { provider, id, name } }. Several can be
-// held at once; each can be switched off without being let go. A provider is only held once it
-// has answered, and every request comes back as { ok, … } so the window can say what went
-// wrong in the provider's own words.
+// { connections: { claude: { enabled }, … }, model: { provider, id, name }, endpoints: [ … ] }.
+// Several can be held at once; each can be switched off without being let go. A provider is
+// only held once it has answered, and every request comes back as { ok, … } so the window can
+// say what went wrong in the provider's own words.
+// `effort` is the reasoning level asked of models that take one: low, medium or high; left
+// out, each model thinks as much as it does by itself.
+// An endpoint is a model added by its address: { id, name, url, model, modelName, levels, key }. It is
+// a connection like the others, under its own id, and offers the one model it was added for.
+// Its API key is kept sealed by the Mac's Keychain, and never leaves this process.
 function aiSettings() {
   const saved = readSettings().ai || {};
   // Before several could be held, `ai.provider` named the one in use.
   const connections = saved.connections || (ai.has(saved.provider) ? { [saved.provider]: { enabled: true } } : {});
-  return { connections, model: saved.model || null };
+  const endpoints = (Array.isArray(saved.endpoints) ? saved.endpoints : []).filter((e) => e && [e.id, e.url, e.model].every((v) => typeof v === 'string' && v) && ai.address(e.url) === e.url);
+  return { connections, model: saved.model || null, endpoints, effort: LEVELS.includes(saved.effort) ? saved.effort : null };
 }
+const LEVELS = ['low', 'medium', 'high'];
 const saveAi = (next) => writeSettings({ ...readSettings(), ai: next });
 const aiOn = (s, id) => Boolean(s.connections[id]?.enabled);
+const aiEndpoint = (s, id) => s.endpoints.find((e) => e.id === id) || null;
+/** Every connection there could be: the tools, then the endpoints in the order they were added. */
+const aiIds = (s) => [...ai.list().map((p) => p.id), ...s.endpoints.map((e) => e.id)];
+/** The models a connection offers: a tool's own list, or the one model of an endpoint. */
+async function aiModels(s, id) {
+  const e = aiEndpoint(s, id);
+  return e ? [{ id: e.model, name: e.modelName || e.model, usual: true, levels: Array.isArray(e.levels) ? e.levels : [] }] : ai.models(id);
+}
+/** The reasoning levels on offer for a model: those of ours that it takes. */
+async function aiLevels(s, model) {
+  const offered = model ? await aiModels(s, model.provider) : [];
+  const takes = offered.find((m) => m.id === model.id)?.levels || [];
+  return LEVELS.filter((l) => takes.includes(l));
+}
+
+async function sealKey(key) {
+  if (!key) return '';
+  try {
+    return (await safeStorage.encryptStringAsync(key)).toString('base64');
+  } catch {
+    throw new Error('The Keychain is not available to keep the API key.');
+  }
+}
+async function openKey(sealed) {
+  if (!sealed) return '';
+  try {
+    return (await safeStorage.decryptStringAsync(Buffer.from(sealed, 'base64'))).result;
+  } catch {
+    throw new Error('The API key could not be read from the Keychain.');
+  }
+}
+
+/** An endpoint as the Add dialog sends it, made fit to use: its address made whole, and its
+    key. A key left empty while changing a held endpoint means the key already kept, but only
+    while the address is the one that key was given for. Throws a line if it cannot be used. */
+async function aiDraft(draft) {
+  const s = aiSettings();
+  const held = aiEndpoint(s, String(draft?.id || ''));
+  const url = ai.address(draft?.url);
+  if (!url) throw new Error('That is not an address.');
+  const typed = String(draft?.key || '').trim();
+  const key = typed || (held && held.url === url ? await openKey(held.key) : '');
+  const model = String(draft?.model || '').trim();
+  return { id: held?.id, url, key, model };
+}
 
 /** The model requests go to: the one chosen, while its provider is held and switched on;
     failing that, the usual model of the first provider that is. Null when none is. */
 async function aiModel(s = aiSettings()) {
   if (s.model && aiOn(s, s.model.provider)) {
     // A choice the provider no longer lists (its models were renamed or retired) gives way to its usual one.
-    const offered = await ai.models(s.model.provider);
+    const offered = await aiModels(s, s.model.provider);
     if (!offered.length || offered.some((m) => m.id === s.model.id)) return s.model;
   }
-  const chosenFirst = [...ai.list()].sort((x, y) => (y.id === s.model?.provider) - (x.id === s.model?.provider));
-  for (const p of chosenFirst) {
-    const usual = aiOn(s, p.id) && (await ai.models(p.id)).find((m) => m.usual);
-    if (usual) return { provider: p.id, id: usual.id, name: usual.name };
+  const chosenFirst = aiIds(s).sort((x, y) => (y === s.model?.provider) - (x === s.model?.provider));
+  for (const id of chosenFirst) {
+    const usual = aiOn(s, id) && (await aiModels(s, id)).find((m) => m.usual);
+    if (usual) return { provider: id, id: usual.id, name: usual.name };
   }
   return null;
 }
 
 /** Everything the AI page draws: each provider with what is known of its tool (once this Mac
-    has been looked over), whether it is held and switched on, and its models; and the model in use. */
+    has been looked over), whether it is held and switched on, and its models; after them the
+    endpoints (`api: true`), without their keys; the ready-made addresses; the model in use;
+    the reasoning level chosen (`effort`), and the levels the model in use takes (`levels`). */
 let aiSeen = null; // the last look over this Mac
 async function aiView() {
   const s = aiSettings();
-  const providers = await Promise.all((aiSeen || ai.list()).map(async (p) => ({ ...p, connected: Boolean(s.connections[p.id]), enabled: aiOn(s, p.id), models: await ai.models(p.id) })));
-  return { providers, model: await aiModel(s) };
+  const tools = await Promise.all((aiSeen || ai.list()).map(async (p) => ({ ...p, connected: Boolean(s.connections[p.id]), enabled: aiOn(s, p.id), models: await ai.models(p.id) })));
+  const apis = await Promise.all(
+    s.endpoints.map(async (e) => ({ id: e.id, api: true, ...ai.place(e.url), url: e.url, model: e.model, hasKey: Boolean(e.key), connected: true, enabled: aiOn(s, e.id), models: await aiModels(s, e.id) }))
+  );
+  const model = await aiModel(s);
+  return { providers: [...tools, ...apis], presets: ai.presets, model, effort: s.effort, levels: await aiLevels(s, model) };
 }
 const asking = new Map(); // request key → the means to call it off
 /** Runs one cancellable piece of work under `key`. Called off, it resolves `{ ok: false, cancelled: true }`. */
@@ -318,37 +379,84 @@ ipcMain.handle('ai:connect', async (_e, key, id) => {
   if (result.ok) {
     // The model in use stays the model in use: a connection added beside it does not take over.
     const s = aiSettings();
-    saveAi({ connections: { ...s.connections, [id]: { enabled: true } }, model: await aiModel(s) });
+    saveAi({ ...s, connections: { ...s.connections, [id]: { enabled: true } }, model: await aiModel(s) });
   }
   return result;
 });
+// The models an address lists, for the Add dialog to offer while its model is being typed.
+ipcMain.handle('ai:endpoint:models', (_e, key, draft) => cancellable(key, async (signal) => ({ ok: true, models: await ai.endpointModels(await aiDraft(draft), { signal }) })));
+// Adds an endpoint, or changes a held one, once its model has answered.
+ipcMain.handle('ai:endpoint:save', (_e, key, draft) =>
+  cancellable(key, async (signal) => {
+    const { id = `api-${Date.now().toString(36)}`, ...endpoint } = await aiDraft(draft);
+    // The key is sealed before anything is sent: a key that cannot be kept is not tried.
+    const sealed = await sealKey(endpoint.key);
+    if (!endpoint.model) return { ok: false, error: 'Name a model.' };
+    const result = await ai.checkEndpoint(endpoint, { signal });
+    if (!result.ok) return result;
+    // What the address says of the model, where it says anything: its full name, and the reasoning levels it takes.
+    const listed = (await ai.endpointModels(endpoint, { signal }).catch(() => [])).find((m) => m.id === endpoint.model);
+    const s = aiSettings();
+    const kept = { id, name: ai.place(endpoint.url).name, url: endpoint.url, model: endpoint.model, modelName: listed?.name || endpoint.model, levels: listed?.levels || [], key: sealed };
+    const endpoints = s.endpoints.some((e) => e.id === id) ? s.endpoints.map((e) => (e.id === id ? kept : e)) : [...s.endpoints, kept];
+    const next = { ...s, endpoints, connections: { ...s.connections, [id]: { enabled: s.connections[id]?.enabled ?? true } } };
+    saveAi({ ...next, model: await aiModel(next) });
+    return result;
+  })
+);
 ipcMain.handle('ai:enable', (_e, id, on) => {
   const s = aiSettings();
   if (s.connections[id]) saveAi({ ...s, connections: { ...s.connections, [id]: { enabled: Boolean(on) } } });
   return aiView();
 });
-// Letting a connection go only makes Storm forget it: the tool stays signed in for its own use.
+// Letting a connection go only makes Storm forget it: the tool stays signed in for its own
+// use. An endpoint is forgotten whole, its key with it.
 ipcMain.handle('ai:disconnect', (_e, id) => {
   const s = aiSettings();
   const { [id]: gone, ...connections } = s.connections;
-  saveAi({ connections, model: s.model?.provider === id ? null : s.model });
+  saveAi({ ...s, connections, model: s.model?.provider === id ? null : s.model, endpoints: s.endpoints.filter((e) => e.id !== id) });
   return aiView();
 });
 ipcMain.handle('ai:model', async (_e, provider, id) => {
   const s = aiSettings();
-  const model = (await ai.models(provider)).find((m) => m.id === id);
+  const model = (await aiModels(s, provider)).find((m) => m.id === id);
   if (model && aiOn(s, provider)) saveAi({ ...s, model: { provider, id: model.id, name: model.name } });
+  return aiView();
+});
+ipcMain.handle('ai:effort', (_e, level) => {
+  saveAi({ ...aiSettings(), effort: LEVELS.includes(level) ? level : null });
   return aiView();
 });
 ipcMain.handle('ai:page', (_e, id) => {
   const url = ai.pageOf(id);
   if (url) return headless ? console.log('OPEN ' + url) : shell.openExternal(url);
 });
-ipcMain.handle('ai:ask', (_e, key, request) =>
+// While a reply is on its way, its words so far go to the window that asked, as 'ai:text'
+// with the request's key: at most one a moment, each the whole reply so far.
+ipcMain.handle('ai:ask', (e, key, request) =>
   cancellable(key, async (signal) => {
-    const model = await aiModel();
+    let latest = null;
+    let due = null;
+    const onText = (text) => {
+      latest = text;
+      due ??= setTimeout(() => {
+        due = null;
+        if (!signal.aborted && !e.sender.isDestroyed()) e.sender.send('ai:text', key, latest);
+      }, 40);
+    };
+    const s = aiSettings();
+    const model = await aiModel(s);
     if (!model) return { ok: false, error: 'No AI is connected.' };
-    return { ok: true, text: await ai.ask(model.provider, request, { signal, model: model.id }), model: model.name };
+    const endpoint = aiEndpoint(s, model.provider);
+    const effort = (await aiLevels(s, model)).includes(s.effort) ? s.effort : undefined; // only where the model takes it
+    try {
+      const text = endpoint
+        ? await ai.askEndpoint({ ...endpoint, key: await openKey(endpoint.key) }, request, { signal, effort, onText })
+        : await ai.ask(model.provider, request, { signal, model: model.id, effort, onText });
+      return { ok: true, text, model: model.name };
+    } finally {
+      clearTimeout(due); // the whole reply follows: no words after it
+    }
   })
 );
 ipcMain.handle('ai:cancel', (_e, key) => asking.get(key)?.abort());

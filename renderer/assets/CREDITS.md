@@ -14,7 +14,7 @@ Catppuccin, Gruvbox, Everforest and One are open community colour palettes; the 
 
 ## Icons
 
-The storm tab's speech bubble is "message-circle" from Lucide, and the settings, choose-image and remove-image icons are based on its "bolt", "image-plus" and "trash-2"; the Appearance, Intelligence and search icons are based on its "palette", "atom" and "search", the Reconnect and Disconnect icons on its "refresh-cw" and "log-out", the Reset icon on its "rotate-ccw", and the General, Shortcuts and About icons on its "sliders-horizontal", "command" and "info" (https://lucide.dev), ISC License.
+The storm tab's speech bubble is "message-circle" from Lucide, and the settings, choose-image and remove-image icons are based on its "bolt", "image-plus" and "trash-2"; the Appearance, Intelligence and search icons are based on its "palette", "atom" and "search", the Reconnect, Disconnect and Edit icons on its "refresh-cw", "log-out" and "pencil", the Reset icon on its "rotate-ccw", the General, Shortcuts and About icons on its "sliders-horizontal", "command" and "info", and the Open icons on its "arrow-up-right" (https://lucide.dev), ISC License.
 
 ## Fonts
 
