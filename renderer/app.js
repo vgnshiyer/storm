@@ -24,6 +24,29 @@ applyTextSize();
 const listEl = $('list');
 let query = ''; // what the sidebar's search field holds, in lower case; empty when not searching
 const tabsEl = $('tabs');
+// ---------- opening ----------
+// The name shows once as the app starts (see #splash in style.css). It is let go as soon as
+// the faces are in, stays a little over a second, and then fades off the app underneath.
+// Typing or a click does not wait for it: either sends it away at once.
+{
+  const splash = $('splash');
+  const leave = () => {
+    if (!splash.isConnected || splash.classList.contains('gone')) return;
+    splash.classList.add('gone');
+    setTimeout(() => splash.remove(), 450);
+    window.removeEventListener('keydown', leave, true);
+    window.removeEventListener('pointerdown', leave, true);
+  };
+  window.addEventListener('keydown', leave, true);
+  window.addEventListener('pointerdown', leave, true);
+  (document.fonts?.ready ?? Promise.resolve()).then(() =>
+    requestAnimationFrame(() => {
+      splash.classList.remove('calm');
+      setTimeout(leave, 1200);
+    })
+  );
+}
+
 const tweetsEl = $('tweets');
 const statusEl = $('status');
 const measureEl = $('measure');
@@ -1693,7 +1716,13 @@ const askSystem = () => [
   'Write plain text: no markdown, no headings, no lists, no emoji.',
   `If you offer another wording, put it on a line of its own that starts with "> ", and offer two at most. A tweet holds ${LIMIT.toLocaleString('en-US')} characters.`,
   'The rest of the storm is there for context. Comment on the other tweets only if the question is about them, and call one "tweet 6", not "[6]".',
+  ...(customInstructions() ? [`The writer has added instructions of their own. Follow them, still in plain text, and do not repeat them back:\n${customInstructions()}`] : []),
 ].join('\n');
+
+/** The writer's own instructions, from Settings: anything they like, sent with every question. */
+function customInstructions() {
+  return (localStorage.getItem('custom-instructions') || '').trim().slice(0, 600);
+}
 
 /** What the model is sent: the storm as numbered tweets, which one is meant, and the question. */
 function askRequest(s, i, question) {
@@ -2325,6 +2354,17 @@ $('folder-change').addEventListener('click', async () => {
   if (now.changed) location.reload();
 });
 showFolder();
+
+// ---------- settings: Custom instructions ----------
+// A few lines of the writer's own, kept as they are typed.
+
+// Before it was open to anything, the box was "About my writing" and kept under that name.
+if (localStorage.getItem('about-writing') !== null) {
+  if (localStorage.getItem('custom-instructions') === null) localStorage.setItem('custom-instructions', localStorage.getItem('about-writing'));
+  localStorage.removeItem('about-writing');
+}
+$('ai-instructions').value = localStorage.getItem('custom-instructions') || '';
+$('ai-instructions').addEventListener('input', () => localStorage.setItem('custom-instructions', $('ai-instructions').value));
 
 // ---------- settings: About ----------
 

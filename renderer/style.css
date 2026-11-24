@@ -331,6 +331,64 @@ body.collapsed #sidebar {
   padding: 0 10px 6px 18px;
 }
 
+/* ---------- opening: the name, once, as the app starts ---------- */
+/* A sheet in the frame's colour over the whole window while the app gets ready. The name
+   stands small in the middle and does what it does on the website: it waits calm (one
+   weight, lowered, unseen), then rises into place and gathers its weight, all letters at
+   once. The line at the foot comes in after it. Then the sheet fades and the app is there;
+   any key or click sends it away at once. */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--frame);
+  transition: opacity 0.4s ease;
+}
+
+#splash.gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#splash .wordmark {
+  font-size: 40px;
+}
+
+#splash .wordmark i {
+  display: inline-block;
+  transition: font-weight 1.5s cubic-bezier(0.16, 1, 0.3, 1), transform 1.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#splash.calm .wordmark i {
+  font-weight: 400;
+  transform: translateY(0.06em);
+  opacity: 0;
+}
+
+#splash-line {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  left: 0;
+  margin: 0;
+  color: var(--f-faint);
+  text-align: center;
+  transition: opacity 0.9s ease 0.3s;
+}
+
+#splash.calm #splash-line {
+  opacity: 0;
+}
+
+/* Where movement is unwelcome the app simply opens. */
+@media (prefers-reduced-motion: reduce) {
+  #splash {
+    display: none;
+  }
+}
+
 /* The logo: the name, each letter a step heavier than the last, regular to black. Each pair
    of letters has its own spacing, since five weights side by side do not space themselves. */
 .wordmark {
@@ -1724,6 +1782,42 @@ body.in-settings #scroll {
 }
 
 .prompt-input::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/* Custom instructions: a box to write in, the shape and place of a group. It grows with
+   what is written, and is never less than three lines. */
+.settings-area {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(3lh + 32px);
+  margin: 0 0 32px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: calc(14px * var(--round));
+  outline: none;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  caret-color: var(--accent);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: 1.5;
+  resize: none;
+  field-sizing: content;
+  user-select: text;
+  transition: box-shadow 0.12s ease;
+}
+
+.settings-area:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 24%, transparent);
+}
+
+.settings-area::placeholder {
+  color: var(--muted);
+}
+
+.settings-area::selection {
   background: color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
