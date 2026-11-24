@@ -143,6 +143,9 @@ main { margin-left: var(--index); padding: 0 var(--gutter) 0 0; max-width: calc(
   transition: background 0.15s;
 }
 .btn:hover { background: var(--btn-hover); }
+/* The second button: an outline in the page's colours, so Follow on X stays the one to press. */
+.btn.quiet { padding: 10px 17px 11px; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); background: transparent; color: var(--ink); }
+.btn.quiet:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 /* ---------- sections ---------- */
