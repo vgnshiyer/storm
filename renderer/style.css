@@ -1781,8 +1781,7 @@ body.posting .tweet > .note {
   white-space: nowrap;
 }
 
-/* A ready question. The first is what Return takes while nothing is typed, and is drawn a
-   step stronger to say so. */
+/* A ready question. */
 .ask-chip {
   height: 26px;
   padding: 0 10px;
@@ -1799,8 +1798,7 @@ body.posting .tweet > .note {
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.ask-chip:hover,
-.ask-chip.picked {
+.ask-chip:hover {
   background: color-mix(in srgb, var(--text) 13%, transparent);
   color: var(--text);
 }

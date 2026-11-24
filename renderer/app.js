@@ -638,6 +638,19 @@ function buildRow(s) {
   row.addEventListener('click', (e) => {
     if (!more.contains(e.target) && renaming !== s) openStorm(s);
   });
+  // A right-click anywhere on the row opens the same menu, at the pointer.
+  row.addEventListener('contextmenu', (e) => {
+    if (renaming === s) return; // the name being typed keeps its own
+    e.preventDefault();
+    const open = () => {
+      openMenu(s, more, { x: e.clientX, y: e.clientY });
+      if (!menuEl.matches(':popover-open')) menuEl.showPopover();
+    };
+    // On a Mac the menu is asked for as the button goes down. Letting the button up outside
+    // an open menu closes it, so the menu waits for that to pass.
+    if (e.buttons) window.addEventListener('pointerup', () => setTimeout(open), { once: true });
+    else open();
+  });
   return row;
 }
 
@@ -669,8 +682,9 @@ function menuItem(glyph, label, run) {
   return item;
 }
 
-/** Fills the three-dots menu for a storm and puts it under that storm's button. */
-function openMenu(s, anchor) {
+/** Fills the three-dots menu for a storm and puts it under that storm's button, or, for a
+    right-click, at the pointer (`at`), turned upwards where there is no room below. */
+function openMenu(s, anchor, at) {
   menuFor = s;
   const newTab = menuItem(NEW_TAB_ICON, 'Open in new tab', () => {
     tabs.push(s);
@@ -681,8 +695,9 @@ function openMenu(s, anchor) {
   remove.classList.add('danger');
   menuEl.replaceChildren(newTab, menuItem($('new').querySelector('svg'), 'Rename', () => startRename(s)), remove);
   const r = anchor.getBoundingClientRect();
-  menuEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - MENU_WIDTH - 8)) + 'px';
-  menuEl.style.top = r.bottom + 4 + 'px';
+  const height = menuEl.childElementCount * 28 + 10; // its lines and its padding
+  menuEl.style.left = Math.max(8, Math.min(at ? at.x : r.left, window.innerWidth - MENU_WIDTH - 8)) + 'px';
+  menuEl.style.top = (at ? (at.y + height <= window.innerHeight - 8 ? at.y : Math.max(8, at.y - height)) : r.bottom + 4) + 'px';
   markMenuRow();
 }
 const MENU_WIDTH = 208; // matches #row-menu in style.css
@@ -1896,8 +1911,8 @@ function buildNote(s, note) {
 }
 
 /** The questions: the ready ones as buttons, a field for any other, and under it the ones
-    typed before. Return sends what is typed; with nothing typed it presses the first button,
-    which is drawn as the one Return will take. The arrows move through the earlier questions. */
+    typed before. Return sends what is typed, or the earlier question the arrows have picked;
+    with neither, it does nothing. */
 function buildAsk(s, note, box) {
   const ready = el('div', 'ask-ready');
   ready.append(
@@ -1929,7 +1944,6 @@ function buildAsk(s, note, box) {
     const typed = input.value.trim().toLowerCase();
     shown = pastAsks().filter((q) => !typed || (q.toLowerCase().includes(typed) && q.toLowerCase() !== typed));
     note.picked = Math.max(-1, Math.min(note.picked ?? -1, shown.length - 1));
-    ready.firstChild.classList.toggle('picked', !typed && note.picked < 0);
     list.replaceChildren(
       ...shown.map((q, k) => {
         const item = el('button', 'ask-item' + (k === note.picked ? ' picked' : ''), q);
@@ -1961,7 +1975,6 @@ function buildAsk(s, note, box) {
       const typed = input.value.trim();
       if (note.picked >= 0) sendAsk(s, note, shown[note.picked]);
       else if (typed) sendAsk(s, note, typed);
-      else sendAsk(s, note, ASKS[0].label, ASKS[0].ask);
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       note.picked = Math.max(-1, Math.min(note.picked + (e.key === 'ArrowDown' ? 1 : -1), shown.length - 1));
