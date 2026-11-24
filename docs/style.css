@@ -1,4 +1,4 @@
-/* Storm's product page. One dark page in the app's own colours and type: a section index down the
+/* Storm's product page. One page in the app’s own colours (its Storm theme, dark or light as the system is) and type: a section index down the
    left, and each section a label, a claim, a short reason and tiles showing the app doing it. */
 
 @font-face {
@@ -34,12 +34,34 @@
   --paper-ink: #1a1a1a;
   --paper-soft: #5f5e5a;
   --line: rgba(255, 255, 255, 0.09);
+  --frame-text: #ffffff; /* the top bar and sidebar text in the mini app */
+  --danger: #f28b82;
+  --dot: rgba(255, 255, 255, 0.16); /* the window buttons drawn on screenshots and the mini app */
+  --btn-hover: #ffffff;
+  color-scheme: dark;
   --sans: 'Schibsted Grotesk', -apple-system, 'Helvetica Neue', sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --index: 216px; /* width of the chapter index */
   --gutter: 40px;
   --gap: 12px;
   --radius: 10px;
+}
+/* The Storm theme, light, when the Mac (or phone) is in light mode: the app's own light values. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --frame: #ecebe7;
+    --page: #ffffff;
+    --ink: #1a1a1a;
+    --soft: #5f5e5a;
+    --muted: #8f8e89;
+    --blue: #3b6fd9;
+    --line: rgba(0, 0, 0, 0.09);
+    --frame-text: #1a1a1a;
+    --danger: #b3261e;
+    --dot: rgba(0, 0, 0, 0.16);
+    --btn-hover: #000000;
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -59,14 +81,19 @@ img { display: block; max-width: 100%; height: auto; }
 
 /* ---------- the wordmark: one word, each letter a step heavier than the last ---------- */
 .word { display: inline-block; font-weight: 400; line-height: 1; letter-spacing: 0; white-space: nowrap; text-decoration: none; }
-.word i { font-style: normal; transition: font-weight 1.6s cubic-bezier(0.3, 0, 0.2, 1); }
+.word i { font-style: normal; }
 .word i:nth-child(1) { font-weight: 400; margin-right: -0.028em; }
-.word i:nth-child(2) { font-weight: 520; margin-right: -0.03em; transition-delay: 0.08s; }
-.word i:nth-child(3) { font-weight: 640; margin-right: -0.06em; transition-delay: 0.16s; }
-.word i:nth-child(4) { font-weight: 770; margin-right: -0.045em; transition-delay: 0.24s; }
-.word i:nth-child(5) { font-weight: 900; transition-delay: 0.32s; }
-/* Calm: the word before it gathers. */
-.word.calm i { font-weight: 400; }
+.word i:nth-child(2) { font-weight: 520; margin-right: -0.03em; }
+.word i:nth-child(3) { font-weight: 640; margin-right: -0.06em; }
+.word i:nth-child(4) { font-weight: 770; margin-right: -0.045em; }
+.word i:nth-child(5) { font-weight: 900; }
+/* The word at the top rises into place and gathers its weight, all letters at once (tuned in the
+   sandbox). It waits calm, lowered and unseen, until page.js lets it go; without script it just shows. */
+#hero-word i {
+  display: inline-block;
+  transition: font-weight 1.5s cubic-bezier(0.16, 1, 0.3, 1), transform 1.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.js #hero-word.calm i { font-weight: 400; transform: translateY(0.06em); opacity: 0; }
 
 /* ---------- section index ---------- */
 #index {
@@ -97,10 +124,11 @@ img { display: block; max-width: 100%; height: auto; }
 main { margin-left: var(--index); padding: 0 var(--gutter) 0 0; max-width: calc(var(--index) + 1180px); }
 
 /* ---------- hero ---------- */
-.hero { min-height: 92vh; min-height: 92svh; display: flex; flex-direction: column; justify-content: flex-end; padding: 120px 0 72px; }
-.hero h1 { font-size: clamp(88px, 21vw, 320px); margin-left: -0.045em; align-self: flex-start; }
-.hero .line { margin-top: 0.5em; font-size: clamp(22px, 2.6vw, 34px); line-height: 1.2; }
-.hero .sub { margin-top: 10px; max-width: 30em; color: var(--soft); font-size: 19px; }
+.hero { min-height: 92vh; min-height: 92svh; display: flex; flex-direction: column; justify-content: flex-end; padding: 64px 0 72px; }
+.hero h1 { font-size: clamp(64px, 9vw, 128px); margin-left: -0.045em; align-self: flex-start; }
+/* The mini app (demo.js) sits above the word. */
+.hero .demo { margin: 0 0 16px; }
+.hero .line { margin-top: 0.6em; font-size: clamp(22px, 2.6vw, 34px); line-height: 1.2; }
 .cta { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 18px; margin-top: 32px; }
 .btn {
   display: inline-block;
@@ -114,7 +142,7 @@ main { margin-left: var(--index); padding: 0 var(--gutter) 0 0; max-width: calc(
   text-decoration: none;
   transition: background 0.15s;
 }
-.btn:hover { background: #ffffff; }
+.btn:hover { background: var(--btn-hover); }
 .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 /* ---------- sections ---------- */
@@ -122,22 +150,15 @@ main { margin-left: var(--index); padding: 0 var(--gutter) 0 0; max-width: calc(
 .label { display: flex; gap: 14px; padding-top: 18px; border-top: 1px solid var(--line); }
 .label span { opacity: 0.6; }
 .chapter h2 { margin-top: 56px; max-width: 17em; font-size: clamp(34px, 4.4vw, 56px); font-weight: 500; line-height: 1.05; letter-spacing: -0.03em; text-wrap: balance; }
-.lead { margin: 20px 0 44px; max-width: 34em; color: var(--soft); font-size: 19px; line-height: 1.5; }
+.lead { margin: 16px 0 44px; max-width: 34em; color: var(--soft); font-size: 19px; line-height: 1.5; }
 
-.grid { display: grid; gap: var(--gap); margin-top: var(--gap); }
-.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tile { border: 1px solid var(--line); border-radius: var(--radius); background: var(--page); }
 .tile.paper { border-color: transparent; background: var(--paper); color: var(--paper-ink); }
 .tile.paper .mono { color: var(--paper-soft); }
 
-.note { padding: 22px 24px 26px; }
-.note b { font-weight: 500; }
-.note p { margin-top: 6px; color: var(--soft); font-size: 16px; }
 
 /* ---------- screenshots: the real app window, with its three window buttons drawn back in ---------- */
 .shot { margin-top: var(--gap); }
-.grid .shot { margin-top: 0; }
 .shot > div { position: relative; container-type: inline-size; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--frame); }
 /* The app's window is 1100 points wide and its buttons sit 16 in, 15 down, 12 across, 8 apart. */
 .shot > div::before {
@@ -148,28 +169,218 @@ main { margin-left: var(--index); padding: 0 var(--gutter) 0 0; max-width: calc(
   width: 1.0909cqw;
   height: 1.0909cqw;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: 1.8182cqw 0 0 rgba(255, 255, 255, 0.16), 3.6364cqw 0 0 rgba(255, 255, 255, 0.16);
+  background: var(--dot);
+  box-shadow: 1.8182cqw 0 0 var(--dot), 3.6364cqw 0 0 var(--dot);
 }
-.shot.light > div::before { background: rgba(0, 0, 0, 0.16); box-shadow: 1.8182cqw 0 0 rgba(0, 0, 0, 0.16), 3.6364cqw 0 0 rgba(0, 0, 0, 0.16); }
 figcaption { padding: 12px 2px 0; }
+.demo figcaption { padding: 0 2px 12px; }
+.shot picture { display: block; }
 
-/* ---------- lists: a name on the left, a note or shortcut on the right ---------- */
-.lines { padding: 8px 28px; }
-.lines > div { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 18px 0; border-top: 1px solid var(--line); }
-.lines > div:first-child { border-top: 0; }
-.lines dt { font-size: clamp(19px, 2.2vw, 26px); line-height: 1.25; }
-.lines dd { flex: none; font: 400 12px/1.4 var(--mono); letter-spacing: 0; color: var(--muted); text-align: right; }
+/* ---------- the themes carousel: one window at a time, swiped or stepped with the arrows ---------- */
+.carousel { margin-top: var(--gap); }
+.track { display: flex; gap: var(--gap); overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; border-radius: var(--radius); }
+.track::-webkit-scrollbar { display: none; }
+.track:focus-visible { outline: 1px solid var(--blue); outline-offset: 4px; }
+.track .slide { flex: 0 0 100%; margin-top: 0; scroll-snap-align: start; }
+.carousel-bar { display: flex; align-items: center; gap: 6px; padding: 12px 2px 0; color: var(--muted); font: 400 12px/1.4 var(--mono); letter-spacing: 0; }
+.carousel-name { margin-right: auto; color: var(--soft); }
+.carousel-count { margin-right: 8px; font-variant-numeric: tabular-nums; }
+.carousel-btn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--soft); cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease; }
+.carousel-btn:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.carousel-btn:disabled { color: var(--muted); opacity: 0.4; background: transparent; cursor: default; }
+.carousel-btn:focus-visible { outline: 1px solid var(--blue); outline-offset: 2px; }
+.carousel-btn svg { display: block; }
 
-.lines.keys dt { font-size: 18px; }
-/* Shortcut symbols come from the system font; they are set at the size of the words beside them. */
-.lines.keys dd { font: 400 17px/1.25 var(--sans); letter-spacing: 0.06em; color: var(--soft); }
-.lines.keys > div { padding: 14px 0; }
+/* ---------- the mini app: a small copy of Storm you can write in (demo.js) ----------
+   Sizes, colours and timings are the app's own. */
+.demo { margin-top: var(--gap); }
+.app {
+  --text: var(--ink);
+  --outline: color-mix(in srgb, var(--frame-text) 7%, transparent);
+  --f-soft: color-mix(in srgb, var(--frame-text) 58%, transparent);
+  --f-faint: color-mix(in srgb, var(--frame-text) 44%, transparent);
+  --f-hover: color-mix(in srgb, var(--frame-text) 7%, transparent);
+  --f-selected: color-mix(in srgb, var(--frame-text) 14%, transparent);
+  --side: 220px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  /* The same shape as the screenshots (2200 × 1440 inside a 1px frame), so every window matches.
+     On a phone it stays taller than that (below), or there is no room to write. */
+  box-sizing: content-box;
+  aspect-ratio: 2200 / 1440;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--frame);
+  color: var(--text);
+  font: 400 13px/1.4 var(--sans);
+  letter-spacing: -0.01em;
+  transition: grid-template-columns 0.18s ease;
+}
+.app.collapsed { --side: 0px; }
+.app button { font: inherit; letter-spacing: inherit; cursor: pointer; }
+.app svg { stroke-width: 1.5px; }
+.app svg * { vector-effect: non-scaling-stroke; }
 
-/* ---------- a storm as the file it is saved in ---------- */
-.file { padding: 22px 28px 30px; overflow: hidden; }
-.file pre { margin: 18px 0 0; color: var(--soft); font: 400 14px/1.7 var(--mono); letter-spacing: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.aside { margin-top: 12px; padding: 0 2px; }
+/* The window's three buttons, as on the screenshots. */
+.app-top { grid-column: 1 / -1; position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 10px 0 84px; color: var(--frame-text); }
+.app-top::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 15px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: 20px 0 0 var(--dot), 40px 0 0 var(--dot);
+}
+.app-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--f-soft); transition: background-color 0.12s ease, color 0.12s ease; }
+.app-icon:hover { background: color-mix(in srgb, var(--frame-text) 11%, transparent); color: var(--frame-text); }
+.app-icon svg { display: block; }
+.app-icon:disabled { color: color-mix(in srgb, var(--frame-text) 22%, transparent); background: transparent; cursor: default; }
+/* Tabs: as in the app, each up to 210px wide and down to 56px, the close button showing on hover. */
+.app-tabs { display: flex; gap: 6px; min-width: 0; margin-left: 102px; transition: margin-left 0.18s ease; }
+.app.collapsed .app-tabs { margin-left: 0; }
+.app-tab { flex: 0 1 auto; width: 210px; display: flex; align-items: center; gap: 4px; min-width: 56px; height: 30px; padding: 0 4px 0 12px; border: 1px solid transparent; border-radius: 6px; background: var(--f-hover); color: var(--f-soft); cursor: pointer; }
+.app-tab:hover { background: color-mix(in srgb, var(--frame-text) 10%, transparent); }
+.app-tab.current { border-color: var(--outline); background: var(--f-selected); color: var(--frame-text); }
+.app-tab > svg { flex: none; margin-right: 3px; }
+.app-tab-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-tab-close { flex: none; display: grid; place-items: center; visibility: hidden; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--f-soft); }
+.app-tab:hover .app-tab-close { visibility: visible; }
+.app-tab-close:hover { background: var(--f-selected); color: var(--frame-text); }
+.app-tab-close svg { display: block; }
+@media (hover: none) { .app-tab.current .app-tab-close { visibility: visible; } }
+/* The + menu: the storms not open yet. */
+.app-picker { position: absolute; z-index: 3; padding: 4px; border: 1px solid var(--outline); border-radius: 8px; background: var(--page); color: var(--text); }
+.app-picker[hidden] { display: none; }
+.app-picker-label { padding: 8px 8px 4px; color: var(--muted); font-size: 12px; }
+.app-picker-row { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); text-align: left; }
+.app-picker-row + .app-picker-row { margin-top: 4px; }
+.app-picker-row:hover, .app-picker-row:focus-visible { outline: none; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.app-picker-title, .app-picker-meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-picker-meta { color: var(--muted); font: 400 12px/1.4 var(--mono); letter-spacing: 0; }
+
+.app-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; color: var(--frame-text); }
+.app-side > * { width: 220px; }
+.app.collapsed .app-side { visibility: hidden; }
+.app-side-head { display: flex; align-items: center; padding: 0 10px 6px 18px; }
+.app-side-head .word { position: relative; top: -1px; margin-right: auto; font-size: 17px; }
+.app-list { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+/* Settings at the foot of the sidebar; its shortcut sits at the far end as plain dimmer text. */
+.app-side-foot { padding: 0 8px 8px; }
+.app-side-link { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--f-soft); text-align: left; transition: background-color 0.12s ease, color 0.12s ease; }
+.app-side-link svg { display: block; flex: none; }
+.app .app-side-link .keys { margin-left: auto; padding: 0; background: transparent; line-height: inherit; }
+.app-side-link:hover { background: var(--f-hover); color: var(--frame-text); }
+.app-storm { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: inherit; text-align: left; }
+.app-storm + .app-storm { margin-top: 4px; }
+.app-storm:hover { background: var(--f-hover); }
+.app-storm.current { background: var(--f-selected); }
+.app-storm-title, .app-storm-meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-storm.current .app-storm-title { font-weight: 500; }
+.app-storm-meta { color: var(--f-faint); font: 400 12px/1.4 var(--mono); letter-spacing: 0; }
+
+.app-pane { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 0 8px 8px 0; border: 1px solid var(--outline); border-radius: 10px; overflow: hidden; background: var(--page); transition: margin-left 0.18s ease; }
+.app.collapsed .app-pane { margin-left: 8px; }
+/* The wallpaper is the backdrop of a storm that hasn't been started. The first character sends it away. */
+.app-wall, .app-shade { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.45s ease; }
+.app-wall { background: url('img/wall.jpg') center / cover; }
+.app-shade { background: linear-gradient(to bottom, transparent 12%, color-mix(in srgb, var(--page) 30%, transparent) 38%, color-mix(in srgb, var(--page) 78%, transparent) 62%, var(--page) 84%); }
+.app.wall .app-wall, .app.wall .app-shade { opacity: 1; }
+.app-status { position: absolute; top: 8px; right: 10px; z-index: 1; height: 26px; color: var(--muted); font: 400 12px/26px var(--mono); letter-spacing: 0; }
+.app-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 44px 24px 0; cursor: text; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--frame-text) 20%, transparent) transparent; }
+.app-editor { max-width: 800px; margin: 0 auto 56px; padding: 6px 40px 24px; border: 1px solid transparent; border-radius: 13px; transition: background-color 0.3s ease, border-color 0.3s ease, max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+.app.wall .app-editor { max-width: 459px; padding: 6px 52px 20px 13px; border-color: var(--outline); background: var(--page); }
+
+.app-tweets { counter-reset: tweet; }
+.app .tweet { counter-increment: tweet; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 54px 64px; column-gap: 14px; margin: 0 -16px; padding: 12px 16px 22px 58px; }
+.app .num { position: absolute; top: 11px; left: 16px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--soft); font: 12px/1 var(--mono); letter-spacing: 0; transition: opacity 0.25s ease; }
+.app .num::before { content: counter(tweet); }
+.app .tweet:not(:last-child)::after { content: ''; position: absolute; top: 43px; bottom: -5px; left: 28px; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+.app .field { grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr); }
+.app .field > * { grid-area: 1 / 1; }
+.app .text { margin: 0; padding: 0; border: 0; font: 400 15px/24px var(--sans); letter-spacing: -0.01em; white-space: pre-wrap; overflow-wrap: break-word; }
+.app .backdrop { position: relative; z-index: 1; color: var(--text); pointer-events: none; }
+.app .backdrop mark { background: transparent; color: var(--danger); }
+.app textarea.text { display: block; width: 100%; height: 100%; resize: none; overflow: hidden; outline: none; background: transparent; color: transparent; caret-color: var(--blue); }
+.app textarea.text::selection { background: color-mix(in srgb, var(--blue) 38%, transparent); color: transparent; }
+.app textarea.text::placeholder { color: var(--muted); }
+.app .gutter { grid-column: 3; margin-left: 6px; color: var(--muted); font: 12px/24px var(--mono); letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; transition: opacity 0.25s ease; }
+.app .tweet.over .gutter { color: var(--danger); }
+/* A new tweet's rail draws down to it as it opens (the opening itself is demo.js's unfold). */
+@keyframes rail-draw { from { transform: scaleY(0); } }
+.app .tweet.draw-rail::after { transform-origin: top; animation: rail-draw 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both; }
+
+/* Each tweet's two buttons, Copy and Ask, showing on hover; Ask stays while a reply is kept. */
+.app .tools { grid-column: 2; display: flex; align-items: flex-start; gap: 2px; }
+.app .tool { display: grid; place-items: center; visibility: hidden; width: 26px; height: 26px; margin-top: -1px; padding: 0; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--soft); transition: background-color 0.12s ease, color 0.12s ease; }
+.app .tool[hidden] { display: none; }
+.app .tool svg { display: block; }
+.app .tool.ask { margin-left: auto; }
+.app .tweet:hover .tool, .app .tweet:focus-within .tool, .app .tool.ask.kept { visibility: visible; }
+.app .tool:hover { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
+.app .tweet:not(:hover) .tool.ask.kept { background: transparent; color: var(--muted); }
+.app-editor.blank .tool, .app.wall .tools { display: none; }
+.app.wall .tweet { grid-template-columns: minmax(0, 1fr) 26px 64px; }
+
+/* Ask: the note under a tweet. The questions, then the wait, then the reply. */
+.app .note { grid-column: 1; margin-top: 12px; padding: 12px; border-radius: 9px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: inset 0 0 0 1px var(--outline); color: var(--soft); font-size: 13px; line-height: 1.5; cursor: default; }
+.app .note.fresh { animation: note-in 0.25s ease; }
+@keyframes note-in { from { opacity: 0; } }
+.app .note-head { display: flex; align-items: center; gap: 10px; margin: -5px -5px 3px 0; color: var(--muted); font: 11px/1 var(--mono); letter-spacing: 0; }
+.app .note-ask { flex: 1; min-width: 0; overflow: hidden; color: var(--soft); text-overflow: ellipsis; white-space: nowrap; }
+.app .note-model { white-space: nowrap; }
+.app .note-acts { display: flex; flex: none; gap: 2px; }
+.app .note-btn { display: grid; flex: none; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background-color 0.12s ease, color 0.12s ease; }
+.app .note-btn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.app .note-btn svg { display: block; }
+.app .note-reply { cursor: text; user-select: text; overflow-wrap: anywhere; }
+.app .note-reply p { margin: 0; white-space: pre-line; }
+.app .note-reply > :not(:first-child) { margin-top: 9px; }
+.app .note-reply em { color: var(--text); font-style: normal; }
+.app .offered { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 8px; align-items: start; padding: 8px 8px 8px 12px; border-radius: 7px; background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); white-space: pre-line; }
+.app .offered > div { padding: 2px 0; }
+.app .note-line { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+.app .note-line > span:not(.waiting) { flex: 1; min-width: 0; }
+.app .ask-top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.app .ask-ready { display: flex; flex: 1; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.app .ask-top > .note-acts { margin: -5px -5px 0 0; }
+.app .ask-chip { height: 26px; max-width: 100%; padding: 0 10px; overflow: hidden; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--soft); text-overflow: ellipsis; white-space: nowrap; transition: background-color 0.12s ease, color 0.12s ease; }
+.app .ask-chip:hover { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); }
+.app .ask-field { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 5px 0 11px; border-radius: 7px; background: color-mix(in srgb, var(--text) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent); cursor: text; }
+.app .ask-input { flex: 1; min-width: 0; height: 24px; margin: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--text); caret-color: var(--blue); font: inherit; letter-spacing: inherit; }
+.app .ask-input::placeholder { color: var(--muted); }
+.app .ask-field .keys { color: var(--muted); font-size: 12px; }
+/* Waiting: nine dots, a light running round the outer eight. */
+.app .waiting { display: grid; flex: none; grid-template: repeat(3, 2.5px) / repeat(3, 2.5px); gap: 2.5px; box-sizing: border-box; width: 16px; height: 16px; margin: 1px 0 0 -2px; padding: 2px 0 0 2px; color: var(--text); }
+.app .waiting i { display: block; border-radius: 50%; background: currentColor; opacity: 0.2; }
+.app .waiting i:not(:nth-child(5)) { animation: chase 1s linear infinite; }
+@keyframes chase { 0% { opacity: 1; } 55%, 100% { opacity: 0.2; } }
+.app .waiting i:nth-child(1) { animation-delay: -1s; }
+.app .waiting i:nth-child(2) { animation-delay: -0.875s; }
+.app .waiting i:nth-child(3) { animation-delay: -0.75s; }
+.app .waiting i:nth-child(6) { animation-delay: -0.625s; }
+.app .waiting i:nth-child(9) { animation-delay: -0.5s; }
+.app .waiting i:nth-child(8) { animation-delay: -0.375s; }
+.app .waiting i:nth-child(7) { animation-delay: -0.25s; }
+.app .waiting i:nth-child(4) { animation-delay: -0.125s; }
+.app-editor.blank .num, .app-editor.blank .gutter { opacity: 0; }
+.app.wall .gutter { display: none; }
+
+.app-hints { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0 42px; cursor: default; }
+.app .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 5px 5px 9px; border: 0; border-radius: 7px; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--soft); font-size: 13px; line-height: 19px; white-space: nowrap; transition: background-color 0.12s ease, color 0.25s ease; }
+.app .pill:not(.off):hover { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); }
+.app .pill.off { color: color-mix(in srgb, var(--text) 30%, transparent); cursor: default; }
+.app .keys { padding: 0 5px; border-radius: 4px; line-height: 24px; background: color-mix(in srgb, currentColor 16%, transparent); color: color-mix(in srgb, currentColor 72%, transparent); letter-spacing: 0.04em; }
+.app button:focus-visible { outline: 1px solid var(--blue); outline-offset: 1px; }
+/* Tooltip: a pill in the pane colour, set apart by an outline, as in the app. */
+.app .app-tip { position: fixed; z-index: 10; display: none; border: 1px solid var(--outline); background: var(--page); color: var(--text); pointer-events: none; transition: none; }
+.app .app-tip.on { display: inline-flex; }
+.app .app-tip:not(:has(.keys)) { padding-right: 9px; }
 
 /* ---------- the last word ---------- */
 .closing { margin-top: 140px; padding-top: 96px; border-top: 1px solid var(--line); }
@@ -203,23 +414,37 @@ footer a:hover { color: var(--ink); }
   #index ol::-webkit-scrollbar { display: none; }
   #index li a span { display: none; }
   main { margin-left: 0; padding: 0 var(--gutter); }
-  .hero { min-height: 78svh; padding: 110px 0 48px; }
-  .hero h1 { font-size: clamp(88px, 27vw, 220px); }
+  .hero { min-height: 78svh; padding: 76px 0 48px; }
+  .hero .demo { margin-bottom: 8px; }
   .chapter { padding-top: 72px; scroll-margin-top: 48px; }
   .chapter h2 { margin-top: 40px; }
   .lead { font-size: 17px; margin-bottom: 32px; }
-  .grid.two, .grid.three { grid-template-columns: minmax(0, 1fr); }
-  .lines { padding: 4px 20px; }
-  .file { padding: 18px 20px 24px; }
-  .file pre { font-size: 12.5px; }
+  /* The mini app on a phone: no sidebar, and text large enough that the phone does not zoom in to type. */
+  .app { min-height: 520px; max-width: calc(100% - 2px); }
+  .app-scroll { padding: 28px 4px 0; }
+  .app-editor, .app.wall .app-editor { padding: 6px 8px 20px 0; }
+  .app .tweet, .app.wall .tweet { grid-template-columns: minmax(0, 1fr) 26px 28px; column-gap: 6px; padding: 12px 12px 22px 50px; }
+  .app .note { grid-column: 1 / -1; }
+  .app .tool.copy { display: none; }
+  .app .gutter { margin-left: 0; text-align: right; }
+  .app .text { font-size: 16px; }
+  .app-hints { margin-left: 36px; }
   .closing { margin-top: 96px; padding-top: 72px; }
   footer { margin-top: 72px; }
 }
-@media (max-width: 520px) {
-  #index li:nth-child(n + 5) { display: none; } /* the strip keeps the first four; the rest are a scroll away */
+/* Too narrow for a sidebar: the mini app is the storm alone, as with the app's sidebar hidden. */
+@media (max-width: 700px) {
+  .app, .app.collapsed { --side: 0px; }
+  .app-side { visibility: hidden; }
+  .app-pane { margin-left: 8px; }
+  .app-tabs { margin-left: 0; }
+  .app-side-toggle { display: none; }
+  /* No keyboard here, so the buttons drop their shortcuts and sit on one line. */
+  .app .keys { display: none; }
+  .app .pill { padding-right: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .word i { transition: none; }
+  #hero-word i { transition: none; }
 }

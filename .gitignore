@@ -4,3 +4,6 @@ dist/
 
 # Branding and design working files stay on this Mac.
 design/
+
+# Local-only tuning page for the site hero.
+docs/sandbox.html
