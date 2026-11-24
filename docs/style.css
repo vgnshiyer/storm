@@ -327,15 +327,19 @@ figcaption { padding: 12px 2px 0; }
 .app .tweet:hover .tool, .app .tweet:focus-within .tool, .app .tool.ask.kept { visibility: visible; }
 .app .tool:hover { background: color-mix(in srgb, var(--text) 14%, transparent); color: var(--text); }
 .app .tweet:not(:hover) .tool.ask.kept { background: transparent; color: var(--muted); }
+/* While a tweet's Ask is open, its button is lit in the accent, as in the app. Closed ones, kept or not, stay grey. */
+.app .tweet:has(> .note) .tool.ask, .app .tweet:has(> .note) .tool.ask.kept { visibility: visible; background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); }
+.app .tweet:has(> .note) .tool.ask:hover { background: color-mix(in srgb, var(--blue) 22%, transparent); }
 .app-editor.blank .tool, .app.wall .tools { display: none; }
 .app.wall .tweet { grid-template-columns: minmax(0, 1fr) 26px 64px; }
 
-/* Ask: the note under a tweet. The questions, then the wait, then the reply. */
-.app .note { grid-column: 1; margin-top: 12px; padding: 12px; border-radius: 9px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: inset 0 0 0 1px var(--outline); color: var(--soft); font-size: 13px; line-height: 1.5; cursor: default; }
+/* Ask: the note under a tweet. The questions, then the wait, then the reply. Its outline, tint and
+   question are in the accent, which in Storm belongs to intelligence. */
+.app .note { grid-column: 1; margin-top: 12px; padding: 12px; border-radius: 9px; background: color-mix(in srgb, var(--blue) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 34%, transparent); color: var(--soft); font-size: 13px; line-height: 1.5; cursor: default; }
 .app .note.fresh { animation: note-in 0.25s ease; }
 @keyframes note-in { from { opacity: 0; } }
 .app .note-head { display: flex; align-items: center; gap: 10px; margin: -5px -5px 3px 0; color: var(--muted); font: 11px/1 var(--mono); letter-spacing: 0; }
-.app .note-ask { flex: 1; min-width: 0; overflow: hidden; color: var(--soft); text-overflow: ellipsis; white-space: nowrap; }
+.app .note-ask { flex: 1; min-width: 0; overflow: hidden; color: var(--blue); text-overflow: ellipsis; white-space: nowrap; }
 .app .note-model { white-space: nowrap; }
 .app .note-acts { display: flex; flex: none; gap: 2px; }
 .app .note-btn { display: grid; flex: none; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background-color 0.12s ease, color 0.12s ease; }
