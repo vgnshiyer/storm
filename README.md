@@ -7,7 +7,7 @@
 
 <p align="center">A place for your X threads.</p>
 
-<p align="center"><a href="https://vgnshiyer.me/storm/">vgnshiyer.me/storm</a> · for Mac · not released yet</p>
+<p align="center"><a href="https://vgnshiyer.me/storm/">vgnshiyer.me/storm</a> · for Mac · <a href="https://github.com/vgnshiyer/storm/releases/latest">Download</a></p>
 
 <p align="center">
   <picture>
@@ -85,9 +85,13 @@ A tweet's images sit in a folder beside the file, named after the storm. You can
 
 Settings, open tabs and kept replies are in `~/Library/Application Support/Storm`.
 
-## Run it
+## Get it
 
-Storm isn't released yet. To run it from source you need [Node.js](https://nodejs.org) and a Mac.
+[Download the latest release](https://github.com/vgnshiyer/storm/releases/latest), open the disk image and drag Storm to Applications. It needs macOS 13 or later, and runs on Apple silicon and Intel Macs.
+
+## Run it from source
+
+You need [Node.js](https://nodejs.org) and a Mac.
 
 ```bash
 npm install
@@ -104,6 +108,8 @@ npm run package
 ```
 
 That writes `dist/Storm-darwin-arm64/Storm.app`, which you can move to Applications.
+
+`scripts/release.sh` builds the signed, notarized disk image for a release. It needs a Developer ID certificate and a `notarytool` keychain profile; the script's header says how to make one.
 
 ## Working on it
 
