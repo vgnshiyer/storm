@@ -11,8 +11,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/img/storm-ask-light.png" />
-    <img src="docs/img/storm-ask.png" alt="A thread in Storm: two numbered tweets, each counted, with a Critique it reply open under the first and a tighter opening line offered to copy" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme-light.png" />
+    <img src="assets/readme-dark.png" alt="A thread in Storm: two numbered tweets, each counted, with a Critique it reply open under the first and a tighter opening line offered to copy" />
   </picture>
 </p>
 
