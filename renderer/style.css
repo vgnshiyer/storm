@@ -943,12 +943,8 @@ body.posting .shot {
   background: var(--bg);
 }
 
-/* The tweet an image is being dragged over. */
-.tweet.drop {
-  border-radius: calc(12px * var(--round));
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  box-shadow: 0 0 0 1px var(--outline);
-}
+/* The tweet an image is being dragged over says so with its number, lit as it is under the
+   pointer (see the number's rule below): no box round the tweet. */
 
 /* While posting: nothing can be removed, handed-over tweets' images step back with their
    words, and the image on the clipboard now is ringed. */
@@ -1056,7 +1052,8 @@ body.wall .tweet > .gutter {
 }
 
 .tweet:not(:only-child) > .num:hover,
-.tweet.dragging > .num {
+.tweet.dragging > .num,
+.tweet.drop > .num {
   background: color-mix(in srgb, var(--text) 16%, transparent);
   color: var(--text);
 }
@@ -1084,12 +1081,11 @@ body.sorting * {
   transition: transform 0.16s ease;
 }
 
-/* A tweet in hand is a card lifted off the page; the rail between tweets steps back until
-   it is put down. */
+/* A tweet in hand is backed by the page's own colour, so its words never print over the
+   tweets it passes; nothing is drawn round it. Its lit number, the cursor and the others
+   moving aside say it is in hand. The rail between tweets steps back until it is put down. */
 .tweet.dragging {
-  border-radius: calc(12px * var(--round));
-  background: color-mix(in srgb, var(--text) 6%, var(--bg));
-  box-shadow: 0 0 0 1px var(--outline);
+  background: var(--bg);
 }
 
 .tweet::after {
