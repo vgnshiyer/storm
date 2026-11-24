@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('api', {
   cancelAsk: (key) => ipcRenderer.invoke('ai:cancel', key),
   loadAsks: () => ipcRenderer.invoke('asks:load'),
   saveAsks: (id, kept) => ipcRenderer.invoke('asks:save', id, kept),
+  clearAsks: () => ipcRenderer.invoke('asks:clear'),
+  folder: () => ipcRenderer.invoke('folder:get'),
+  chooseFolder: () => ipcRenderer.invoke('folder:choose'),
+  showFolder: () => ipcRenderer.invoke('folder:show'),
+  appInfo: () => ipcRenderer.invoke('app:info'),
+  openPlace: (place) => ipcRenderer.invoke('app:open', place),
   openComposer: (text) => ipcRenderer.invoke('post:open', text),
   onMenu: (fn) => ipcRenderer.on('menu', (_e, action) => fn(action)),
 });

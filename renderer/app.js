@@ -1,11 +1,26 @@
 import { Wallpaper } from './wallpaper.js';
 
-const LIMIT = 280;
+// What a tweet holds: 280, or 25,000 for an X Premium account. Chosen in Settings.
+const LIMITS = [280, 25000];
+let LIMIT = LIMITS.find((n) => String(n) === localStorage.getItem('limit')) ?? LIMITS[0];
 const URL_LENGTH = 23;
 const SEP = '\n\n---\n\n';
 const LINE_HEIGHT = 24;
 
 const $ = (id) => document.getElementById(id);
+
+// The size of a storm's words, also chosen in Settings. Every size keeps the 24px line.
+const TEXT_SIZES = [
+  ['small', 'Small', 14],
+  ['medium', 'Medium', 15],
+  ['large', 'Large', 17],
+];
+function applyTextSize() {
+  const [id, , px] = TEXT_SIZES.find(([size]) => size === localStorage.getItem('text-size')) ?? TEXT_SIZES[1];
+  document.documentElement.style.setProperty('--write-size', px + 'px');
+  return id;
+}
+applyTextSize();
 const listEl = $('list');
 let query = ''; // what the sidebar's search field holds, in lower case; empty when not searching
 const tabsEl = $('tabs');
@@ -119,6 +134,35 @@ const isEmpty = (s) => !s.tweets.some((_, i) => hasContent(s, i));
 /** Nothing to keep: no words and no name. Such a storm has no file and no place in the list. */
 const isBlank = (s) => isEmpty(s) && !s.name;
 const tweetCount = (s) => s.tweets.filter((_, i) => hasContent(s, i)).length;
+
+// Numbering, when it is switched on in Settings: each tweet goes out with its place in the
+// storm before its words ("3/ …"). A storm of one, and a tweet with no words (only images),
+// are left as they are.
+if (localStorage.getItem('number-style')) {
+  // A style and a position could be chosen for a while. Any style at all now means "on".
+  if (localStorage.getItem('number-style') === 'off') localStorage.removeItem('number-tweets');
+  else localStorage.setItem('number-tweets', '1');
+  localStorage.removeItem('number-style');
+  localStorage.removeItem('number-place');
+}
+const numbering = () => localStorage.getItem('number-tweets') === '1';
+
+/** What tweet `i` starts with: "3/ ", or '' if it goes without a number. */
+function numberOf(s, i) {
+  if (!numbering() || !s.tweets[i].trim()) return '';
+  const order = s.tweets.flatMap((_, k) => (hasContent(s, k) ? [k] : []));
+  return order.length > 1 ? `${order.indexOf(i) + 1}/ ` : '';
+}
+
+/** A tweet as it leaves the app: its number, if tweets are numbered, and its words. */
+const outgoing = (s, i) => numberOf(s, i) + s.tweets[i].trim();
+
+/** How long tweet `i` is as it leaves the app, and where in its own words it first goes over. */
+function measureOutgoing(s, i) {
+  const number = numberOf(s, i);
+  const { count, overAt } = measure(number + s.tweets[i].trimEnd());
+  return { count, overAt: overAt < 0 ? overAt : Math.max(0, overAt - number.length) };
+}
 const plural = (n) => `${n} tweet${n === 1 ? '' : 's'}`;
 
 /** A storm goes by its name, or failing that by its first line. */
@@ -1027,7 +1071,7 @@ function goTo(step) {
 /** Puts a step on the clipboard: a tweet's words, or one of its images. */
 function copyStep(step) {
   const { place, file } = post.steps[step];
-  return file ? window.api.copyImage(cur.id, file) : window.api.copy(cur.tweets[post.order[place]].trim());
+  return file ? window.api.copyImage(cur.id, file) : window.api.copy(outgoing(cur, post.order[place]));
 }
 
 /** A tweet copied by its own button while posting: carry on from its words. */
@@ -1055,7 +1099,7 @@ async function startPosting() {
   post.step = first.file ? -1 : 0;
   markPosting();
   $('post-next').focus();
-  await window.api.openComposer(first.file ? '' : cur.tweets[post.order[0]].trim());
+  await window.api.openComposer(first.file ? '' : outgoing(cur, post.order[0]));
 }
 
 /** Puts the following step on the clipboard, or ends once the last one has gone. Only ever
@@ -1266,15 +1310,17 @@ function buildTweet(i) {
   });
   ta.addEventListener('input', (e) => {
     noteTyping(i, e.inputType);
+    const had = hasContent(cur, i);
     cur.tweets[i] = ta.value;
     if (cur.shape) cur.shape[i] = ta.value; // see settleNotes
     if (find.open) refreshFind(false); // the matches move as the words do
+    else if (numbering() && had !== hasContent(cur, i)) [...tweetsEl.children].forEach(refreshTweet); // every tweet's number has changed
     else refreshTweet(row, i);
     touch();
   });
   ta.addEventListener('keydown', (e) => onKey(e, ta, i));
   copy.addEventListener('click', async () => {
-    await window.api.copy(cur.tweets[i].trim());
+    await window.api.copy(outgoing(cur, i));
     if (post.on) takeUp(i); // copied by hand: posting carries on from here
     copy.replaceChildren(icon(CHECK_ICON, 14, 24)); // a tick, for a moment, to say it worked
     setTimeout(() => copy.replaceChildren(icon(COPY_ICON, 14, 24)), 1200);
@@ -1286,7 +1332,7 @@ function buildTweet(i) {
 
 function refreshTweet(row, i) {
   const text = cur.tweets[i];
-  const { count, overAt } = measure(text);
+  const { count, overAt } = measureOutgoing(cur, i); // its number counts too
   const over = count > LIMIT;
 
   paintBackdrop(row.querySelector('.backdrop'), text, over ? overAt : Infinity, i);
@@ -1610,25 +1656,42 @@ $('scroll').addEventListener('mousedown', (e) => {
 // so opening Ask on that tweet again shows it without asking anything. Reset forgets it and
 // brings the questions back.
 
-/** The ready questions: what the button says, and what the model is asked. */
-const ASKS = [
+/** The ready questions as they come: what the button says, and what the model is asked. */
+const OWN_ASKS = [
   { label: 'What do you think?', ask: 'What do you think?' },
   { label: 'Critique it', ask: 'Critique it. What is weak, unclear or unconvincing here?' },
   { label: 'Tighten it', ask: 'How could this say the same in fewer words?' },
   { label: 'Check the flow', ask: 'Does this follow from the tweet before it, and lead into the one after?' },
 ];
+
+/** The ready questions as they now stand: Settings can add to them and take any away. */
+function readyAsks() {
+  try {
+    const kept = JSON.parse(localStorage.getItem('prompts'));
+    if (Array.isArray(kept)) return kept.filter((a) => typeof a?.label === 'string' && a.label && typeof a.ask === 'string' && a.ask);
+  } catch {
+    // Not a list: the ones that came with the app.
+  }
+  return OWN_ASKS;
+}
+const sameAsks = (a, b) => a.length === b.length && a.every((x, k) => x.label === b[k].label && x.ask === b[k].ask);
+function saveAsks(asks) {
+  if (sameAsks(asks, OWN_ASKS)) localStorage.removeItem('prompts');
+  else localStorage.setItem('prompts', JSON.stringify(asks));
+}
+
 const ASK_KEPT = 5; // how many typed questions are offered again
 const ASK_ICON = document.querySelector('section[data-section="ai"]').dataset.icon; // the Intelligence page's own mark
 const RESET_ICON = 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5';
 const CLOSE_ICON = 'M4 4l8 8M12 4l-8 8';
 
-const ASK_SYSTEM = [
+const askSystem = () => [
   'You are a second pair of eyes for someone writing a tweet storm (a thread for X) in a writing app.',
   'They ask about one tweet at a time. They will read what you say and then edit the tweet themselves, taking what they like, so give your opinion rather than a finished rewrite.',
   'Be direct and specific. Quote the exact words you mean, in double quotes. Say what works as well as what does not, and do not flatter.',
   'Keep it short: three short paragraphs at most and under 90 words, unless the question needs more.',
   'Write plain text: no markdown, no headings, no lists, no emoji.',
-  'If you offer another wording, put it on a line of its own that starts with "> ", and offer two at most. A tweet holds 280 characters.',
+  `If you offer another wording, put it on a line of its own that starts with "> ", and offer two at most. A tweet holds ${LIMIT.toLocaleString('en-US')} characters.`,
   'The rest of the storm is there for context. Comment on the other tweets only if the question is about them, and call one "tweet 6", not "[6]".',
 ].join('\n');
 
@@ -1640,21 +1703,21 @@ function askRequest(s, i, question) {
   });
   const named = s.name ? `The storm is called "${s.name}". Its tweets:` : 'The storm, tweet by tweet:';
   const about = `The question is about tweet [${i + 1}] (${measure(s.tweets[i]).count} of ${LIMIT} characters).`;
-  return { system: ASK_SYSTEM, prompt: `${named}\n\n${tweets.join('\n\n')}\n\n${about}\n\nQuestion: ${question}` };
+  return { system: askSystem(), prompt: `${named}\n\n${tweets.join('\n\n')}\n\n${about}\n\nQuestion: ${question}` };
 }
 
 /** The questions typed before, newest first. */
 function pastAsks() {
   try {
     const kept = JSON.parse(localStorage.getItem('asks'));
-    return Array.isArray(kept) ? kept.filter((q) => typeof q === 'string' && q && !ASKS.some((a) => a.label === q)).slice(0, ASK_KEPT) : [];
+    return Array.isArray(kept) ? kept.filter((q) => typeof q === 'string' && q && !readyAsks().some((a) => a.label === q)).slice(0, ASK_KEPT) : [];
   } catch {
     return [];
   }
 }
 
 function keepAsk(question) {
-  if (ASKS.some((a) => a.label === question)) return;
+  if (readyAsks().some((a) => a.label === question)) return;
   localStorage.setItem('asks', JSON.stringify([question, ...pastAsks().filter((q) => q !== question)].slice(0, ASK_KEPT)));
 }
 
@@ -1916,7 +1979,7 @@ function buildNote(s, note) {
 function buildAsk(s, note, box) {
   const ready = el('div', 'ask-ready');
   ready.append(
-    ...ASKS.map((a) => {
+    ...readyAsks().map((a) => {
       const button = el('button', 'ask-chip', a.label);
       button.type = 'button';
       button.addEventListener('click', () => sendAsk(s, note, a.label, a.ask));
@@ -1935,9 +1998,16 @@ function buildAsk(s, note, box) {
   // The ready questions share their row with the way out.
   const acts = el('div', 'note-acts');
   acts.append(noteButton(CLOSE_ICON, 16, 'Close', () => closeNote(s, note, true)));
+  // With every ready question removed in Settings, the field takes their place in the row.
   const top = el('div', 'ask-top');
-  top.append(ready, acts);
-  box.append(top, field, list);
+  if (ready.childElementCount) {
+    top.append(ready, acts);
+    box.append(top, field, list);
+  } else {
+    top.classList.add('bare');
+    top.append(field, acts);
+    box.append(top, list);
+  }
 
   let shown = [];
   const draw = () => {
@@ -2141,10 +2211,69 @@ function renderSettings() {
     })
   );
   for (const s of sectionEls) s.hidden = s.dataset.section !== sectionId;
+  renderGeneral();
   renderAppearance();
   renderAI();
+  renderPrompts();
+  renderKept();
   if (sectionId === 'ai') refreshAI();
 }
+
+// ---------- settings: General ----------
+
+/** Fills a segmented control: `options` are [value, label], `current` the one chosen. */
+function segmented(id, options, current, choose) {
+  $(id).replaceChildren(
+    ...options.map(([value, label]) => {
+      const option = el('button', value === current ? 'current' : '', label);
+      option.type = 'button';
+      option.setAttribute('role', 'radio');
+      option.setAttribute('aria-checked', String(value === current));
+      option.addEventListener('click', () => {
+        choose(value);
+        renderGeneral();
+      });
+      return option;
+    })
+  );
+}
+
+function renderGeneral() {
+  $('number-tweets').setAttribute('aria-checked', String(numbering()));
+  segmented('limits', LIMITS.map((n) => [n, n.toLocaleString('en-US')]), LIMIT, (n) => {
+    LIMIT = n;
+    localStorage.setItem('limit', String(n));
+  });
+  segmented('text-sizes', TEXT_SIZES.map(([id, name]) => [id, name]), applyTextSize(), (id) => {
+    localStorage.setItem('text-size', id);
+    applyTextSize();
+  });
+}
+
+$('number-tweets').addEventListener('click', () => {
+  if (numbering()) localStorage.removeItem('number-tweets');
+  else localStorage.setItem('number-tweets', '1');
+  renderGeneral();
+});
+
+/** Shows where the storms are kept. */
+async function showFolder(now) {
+  const { path, shown } = now ?? (await window.api.folder());
+  $('folder-path').textContent = shown;
+  $('folder-path').dataset.tip = path;
+}
+$('folder-show').addEventListener('click', () => window.api.showFolder());
+$('folder-change').addEventListener('click', async () => {
+  const now = await window.api.chooseFolder();
+  // Another folder is another set of storms: the window starts again on what is in it.
+  if (now.changed) location.reload();
+});
+showFolder();
+
+// ---------- settings: About ----------
+
+window.api.appInfo().then(({ version }) => ($('about-version').textContent = 'version ' + version));
+for (const button of document.querySelectorAll('[data-open]')) button.addEventListener('click', () => window.api.openPlace(button.dataset.open));
 
 // ---------- settings: Intelligence ----------
 // The Intelligence page (its section is still called `ai` in the code) lists the ways Storm can reach a model, and the model it asks. Connect opens a
@@ -2402,6 +2531,112 @@ window.addEventListener('focus', () => {
 });
 
 /** Opens the settings tab, or goes to it if it is already open. */
+// ---------- settings: Intelligence, the ready questions and the kept replies ----------
+
+/** The Prompts list, drawn as the questions stand in the ask card: each a button's shape with
+    a cross to take it away. A last button adds one: it turns into a field, and Return keeps
+    what is typed (asked as it is written) and leaves the field open for another. If the list
+    is no longer as it came, a second button puts it back. */
+const ADD_ICON = 'M8 3v10M3 8h10';
+let addingPrompt = false;
+function renderPrompts() {
+  const asks = readyAsks();
+  const chips = asks.map((a, k) => {
+    const chip = el('span', 'prompt');
+    const remove = el('button', 'prompt-x');
+    remove.type = 'button';
+    remove.dataset.tip = 'Remove';
+    remove.setAttribute('aria-label', `Remove "${a.label}"`);
+    remove.append(icon(CLOSE_ICON, 12));
+    remove.addEventListener('click', () => {
+      hideTip();
+      saveAsks(asks.filter((_, at) => at !== k));
+      renderPrompts();
+    });
+    chip.append(el('span', 'prompt-name', a.label), remove);
+    return chip;
+  });
+
+  if (addingPrompt) {
+    const input = el('input', 'prompt-input');
+    input.type = 'text';
+    input.placeholder = 'Add a prompt';
+    input.setAttribute('aria-label', 'Add a prompt');
+    input.maxLength = 120;
+    const keep = () => {
+      const typed = input.value.trim();
+      if (typed && !asks.some((a) => a.label.toLowerCase() === typed.toLowerCase())) saveAsks([...asks, { label: typed, ask: typed }]);
+      return typed;
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!keep()) return;
+        input.dataset.kept = '1'; // redrawing takes this field away: that is not a click elsewhere
+        renderPrompts();
+        $('ai-prompts').querySelector('.prompt-input').focus(); // ready for the next one
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        addingPrompt = false;
+        renderPrompts();
+      }
+    });
+    // Clicking away keeps what was typed and closes the field.
+    input.addEventListener('blur', () => {
+      if (!addingPrompt || input.dataset.kept) return;
+      addingPrompt = false;
+      keep();
+      renderPrompts();
+    });
+    chips.push(input);
+  } else {
+    const add = el('button', 'prompt-more');
+    add.type = 'button';
+    add.append(icon(ADD_ICON, 12), 'Add');
+    add.addEventListener('click', () => {
+      addingPrompt = true;
+      renderPrompts();
+      $('ai-prompts').querySelector('.prompt-input').focus();
+    });
+    chips.push(add);
+    if (!sameAsks(asks, OWN_ASKS)) {
+      const restore = el('button', 'prompt-more');
+      restore.type = 'button';
+      restore.dataset.tip = "Put back Storm's own prompts";
+      restore.append(icon(RESET_ICON, 12, 24), 'Restore');
+      restore.addEventListener('click', () => {
+        hideTip();
+        saveAsks(OWN_ASKS);
+        renderPrompts();
+      });
+      chips.push(restore);
+    }
+  }
+  const row = el('div', 'prompts');
+  row.append(...chips);
+  $('ai-prompts').replaceChildren(row);
+}
+
+const keptCount = () => storms.reduce((n, s) => n + [...(s.notes?.values() ?? [])].filter((note) => note.saved).length, 0);
+
+function renderKept() {
+  const n = keptCount();
+  $('kept-count').textContent = `${n || 'No'} ${n === 1 ? 'reply is' : 'replies are'} kept.`;
+  $('kept-forget').disabled = !n;
+}
+
+$('kept-forget').addEventListener('click', async () => {
+  for (const s of storms) {
+    for (const [at, note] of s.notes ?? []) {
+      note.saved = null;
+      if (note.phase === 'done') s.notes.delete(at); // it was showing, or holding, only that reply
+    }
+  }
+  await window.api.clearAsks();
+  renderKept();
+});
+
 function openSettings() {
   if (!tabs.includes(SETTINGS)) tabs.push(SETTINGS);
   show(tabs.indexOf(SETTINGS));

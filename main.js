@@ -3,9 +3,11 @@ const path = require('node:path');
 const fs = require('node:fs');
 const ai = require('./ai');
 
-// One Markdown file per storm, in Documents/Storms. STORM_DIR overrides the folder and keeps the app's own
-// state beside it, so a test run never touches the real storms or settings.
-const DIR = process.env.STORM_DIR || path.join(app.getPath('documents'), 'Storms');
+// One Markdown file per storm, in Documents/Storms unless another folder has been chosen in
+// Settings (see "the storms' folder" below). STORM_DIR overrides the folder and keeps the
+// app's own state beside it, so a test run never touches the real storms or settings.
+const DEFAULT_DIR = path.join(app.getPath('documents'), 'Storms');
+let DIR = process.env.STORM_DIR || DEFAULT_DIR;
 if (process.env.STORM_DIR) app.setPath('userData', path.join(DIR, '.userdata'));
 
 // ---------- storms ----------
@@ -137,6 +139,45 @@ function writeSettings(settings) {
   fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2));
 }
 
+// ---------- the storms' folder ----------
+// settings.json's `dir` is the folder chosen in Settings; without it, storms live in
+// Documents/Storms. Choosing a folder moves nothing: the app reads and writes there from then on.
+
+if (!process.env.STORM_DIR) {
+  const chosen = readSettings().dir;
+  if (typeof chosen === 'string' && path.isAbsolute(chosen)) DIR = chosen;
+}
+
+/** The folder as Settings shows it: its path, and the same with the home folder as "~". */
+function folder() {
+  const home = app.getPath('home');
+  return { path: DIR, shown: DIR === home || DIR.startsWith(home + path.sep) ? '~' + DIR.slice(home.length) : DIR };
+}
+
+/** Asks for a folder and makes it the storms' folder. Resolves with the folder now in use,
+    and whether it changed. A test run takes the folder from STORM_PICK_DIR instead of asking. */
+async function chooseFolder() {
+  let picked = process.env.STORM_PICK_DIR;
+  if (!headless) {
+    const asked = await dialog.showOpenDialog(win, {
+      title: 'Choose a folder for your storms',
+      message: 'Storm keeps one Markdown file per storm in this folder.',
+      buttonLabel: 'Use this folder',
+      defaultPath: DIR,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    picked = asked.canceled ? null : asked.filePaths[0];
+  }
+  if (!picked || path.resolve(picked) === path.resolve(DIR)) return { ...folder(), changed: false };
+  fs.mkdirSync(picked, { recursive: true });
+  DIR = path.resolve(picked);
+  const settings = readSettings();
+  if (DIR === DEFAULT_DIR) delete settings.dir;
+  else settings.dir = DIR;
+  writeSettings(settings);
+  return { ...folder(), changed: true };
+}
+
 function wallpaper() {
   const w = readSettings().wallpaper;
   if (w?.kind === 'custom' && typeof w.file === 'string' && path.basename(w.file) === w.file) {
@@ -181,6 +222,19 @@ async function chooseWallpaper() {
 ipcMain.handle('storms:list', () => list());
 ipcMain.handle('storms:save', (_e, id, text, mtime) => save(id, text, mtime));
 ipcMain.handle('storms:remove', (_e, id) => remove(id));
+ipcMain.handle('folder:get', () => folder());
+ipcMain.handle('folder:choose', () => chooseFolder());
+ipcMain.handle('folder:show', () => {
+  fs.mkdirSync(DIR, { recursive: true });
+  return headless ? console.log('SHOW ' + DIR) : shell.openPath(DIR);
+});
+// About: the version, and the two places the app points to.
+const PLACES = { site: 'https://vgnshiyer.me/storm/', source: 'https://github.com/vgnshiyer/storm' };
+ipcMain.handle('app:info', () => ({ version: app.getVersion() }));
+ipcMain.handle('app:open', (_e, place) => {
+  const url = PLACES[place];
+  if (url) return headless ? console.log('OPEN ' + url) : shell.openExternal(url);
+});
 // A test run leaves the Mac's clipboard and browser alone: it only notes what it would have done.
 ipcMain.handle('clipboard:write', (_e, text) => (headless ? console.log('COPY ' + JSON.stringify(String(text))) : clipboard.writeText(String(text))));
 // Posting: one tweet is handed to X's own composer in the browser. Nothing is posted until
@@ -311,6 +365,7 @@ function readAsks() {
   }
 }
 ipcMain.handle('asks:load', () => readAsks());
+ipcMain.handle('asks:clear', () => fs.rmSync(asksFile(), { force: true }));
 /** Replaces what is kept for one storm; with nothing to keep, the storm is dropped from the file. */
 ipcMain.handle('asks:save', (_e, id, kept) => {
   const all = readAsks();

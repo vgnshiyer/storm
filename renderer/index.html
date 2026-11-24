@@ -80,6 +80,47 @@
       </div>
       <div id="settings-page">
         <div class="settings-body">
+          <section data-section="general" data-name="General" data-icon="M10 5H3M12 19H3M14 3v4M16 17v4M21 12h-9M21 19h-5M21 5h-7M8 10v4M8 12H3">
+            <h1>General</h1>
+            <h2>Writing</h2>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Number the tweets</div>
+                  <div class="row-help">Starts each tweet with 1/, 2/ and so on when it is copied or posted.</div>
+                </div>
+                <button id="number-tweets" class="switch" type="button" role="switch" aria-label="Number the tweets"></button>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Character limit</div>
+                  <div class="row-help">A tweet holds 280. X Premium accounts can post up to 25,000.</div>
+                </div>
+                <div id="limits" class="segmented" role="radiogroup" aria-label="Character limit"></div>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Text size</div>
+                  <div class="row-help">The size of the words in a storm.</div>
+                </div>
+                <div id="text-sizes" class="segmented" role="radiogroup" aria-label="Text size"></div>
+              </div>
+            </div>
+            <h2>Files</h2>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div class="row-words">
+                  <div class="row-title">Storms folder</div>
+                  <div id="folder-path" class="row-help path"></div>
+                </div>
+                <div class="row-actions">
+                  <button id="folder-show" class="btn" type="button">Show in Finder</button>
+                  <button id="folder-change" class="btn" type="button">Change…</button>
+                </div>
+              </div>
+            </div>
+            <p class="settings-note">Each storm is a plain Markdown file in this folder. Changing the folder does not move the storms you have: Storm shows whatever is in the new one.</p>
+          </section>
           <section data-section="appearance" data-name="Appearance" data-icon="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8zM13.5 6.5h.01M17.5 10.5h.01M6.5 12.5h.01M8.5 7.5h.01">
             <h1>Appearance</h1>
             <div class="settings-group">
@@ -142,6 +183,131 @@
                   <div class="row-help">Used whenever you ask Storm for help.</div>
                 </div>
                 <button id="ai-model" class="btn select" type="button" disabled><span id="ai-model-name">No connection</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
+              </div>
+            </div>
+            <h2>Prompts</h2>
+            <div id="ai-prompts" class="settings-group"></div>
+            <p class="settings-note">The ready questions in the ask card.</p>
+            <h2>Kept replies</h2>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Replies kept with tweets</div>
+                  <div id="kept-count" class="row-help"></div>
+                </div>
+                <button id="kept-forget" class="btn danger" type="button" disabled>Forget all</button>
+              </div>
+            </div>
+          </section>
+          <section data-section="shortcuts" data-name="Shortcuts" data-icon="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3">
+            <h1>Shortcuts</h1>
+            <h2>Writing</h2>
+            <div class="settings-group tight">
+              <div class="settings-row">
+                <div class="row-title">New tweet at the cursor</div>
+                <span class="keys">⌘↵</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Merge with the tweet above</div>
+                <span class="keys">⌘⌫</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Delete the tweet</div>
+                <span class="keys">⇧⌘⌫</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Ask about the tweet</div>
+                <span class="keys">⌘K</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Find in the storm</div>
+                <span class="keys">⌘F</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Undo</div>
+                <span class="keys">⌘Z</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Redo</div>
+                <span class="keys">⇧⌘Z</span>
+              </div>
+            </div>
+            <h2>Posting</h2>
+            <div class="settings-group tight">
+              <div class="settings-row">
+                <div class="row-title">Post to X</div>
+                <span class="keys">⇧⌘↵</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Copy the next tweet</div>
+                <span class="keys">↵</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Stop posting</div>
+                <span class="keys">esc</span>
+              </div>
+            </div>
+            <h2>Storms and tabs</h2>
+            <div class="settings-group tight">
+              <div class="settings-row">
+                <div class="row-title">New storm</div>
+                <span class="keys">⌘N</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">New tab</div>
+                <span class="keys">⌘T</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Close tab</div>
+                <span class="keys">⌘W</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Next tab</div>
+                <span class="keys">⌃⇥</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Previous tab</div>
+                <span class="keys">⌃⇧⇥</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Search storms</div>
+                <span class="keys">⇧⌘F</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Show or hide the sidebar</div>
+                <span class="keys">⌘B</span>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Settings</div>
+                <span class="keys">⌘P</span>
+              </div>
+            </div>
+          </section>
+          <section data-section="about" data-name="About" data-icon="M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM12 16v-4M12 8h.01">
+            <h1>About</h1>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <span class="wordmark about-mark" role="img" aria-label="Storm"><i>s</i><i>t</i><i>o</i><i>r</i><i>m</i></span>
+                  <div class="row-help">A calm place to write tweet storms.</div>
+                </div>
+                <span id="about-version" class="row-state"></span>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Website</div>
+                  <div class="row-help">vgnshiyer.me/storm</div>
+                </div>
+                <button class="btn" type="button" data-open="site">Open</button>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Source code</div>
+                  <div class="row-help">github.com/vgnshiyer/storm</div>
+                </div>
+                <button class="btn" type="button" data-open="source">Open</button>
               </div>
             </div>
           </section>
