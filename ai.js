@@ -659,6 +659,8 @@ module.exports = {
   list,
   inspect,
   models,
+  /** A provider's models if they have been asked for already, else null: nothing is run. */
+  known: (id) => offered.get(id) || null,
   ask,
   check,
   signIn,

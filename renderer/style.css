@@ -335,8 +335,7 @@ body.collapsed #sidebar {
 /* A sheet in the frame's colour over the whole window while the app gets ready. The name
    stands small in the middle and does what it does on the website: it waits calm (one
    weight, lowered, unseen), then rises into place and gathers its weight, all letters at
-   once. The line at the foot comes in after it. Then the sheet fades and the app is there;
-   any key or click sends it away at once. */
+   once. Then the sheet fades and the app is there; any key or click sends it away at once. */
 #splash {
   position: fixed;
   inset: 0;
@@ -364,21 +363,6 @@ body.collapsed #sidebar {
 #splash.calm .wordmark i {
   font-weight: 400;
   transform: translateY(0.06em);
-  opacity: 0;
-}
-
-#splash-line {
-  position: absolute;
-  right: 0;
-  bottom: 28px;
-  left: 0;
-  margin: 0;
-  color: var(--f-faint);
-  text-align: center;
-  transition: opacity 0.9s ease 0.3s;
-}
-
-#splash.calm #splash-line {
   opacity: 0;
 }
 

@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   copyImage: (id, name) => ipcRenderer.invoke('media:copy', id, name),
   sweepMedia: (refs) => ipcRenderer.invoke('media:sweep', refs),
   trashMedia: (id) => ipcRenderer.invoke('media:trash', id),
-  aiList: () => ipcRenderer.invoke('ai:list'),
+  aiList: (quick) => ipcRenderer.invoke('ai:list', quick),
   aiStatus: () => ipcRenderer.invoke('ai:status'),
   aiSignIn: (key, id) => ipcRenderer.invoke('ai:signin', key, id),
   aiConnect: (key, id) => ipcRenderer.invoke('ai:connect', key, id),

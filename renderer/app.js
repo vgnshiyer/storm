@@ -2381,6 +2381,13 @@ for (const button of document.querySelectorAll('[data-open]')) button.addEventLi
     (`connected`), switched on (`enabled`) and what `models` it offers; its `installed` is
     undefined until this Mac has been looked over. `model` is the one requests go to. */
 let ai = null;
+// What is already known of the connections is fetched as the app starts (no tool is run for
+// it), so the page has its rows the moment it is first opened.
+window.api.aiList(true).then((view) => {
+  if (ai) return;
+  ai = view;
+  renderAI();
+});
 /** The connection being made in the dialog, or null:
     `{ id, key, phase, installed, version, signedIn, error, ms }`, where phase is one of
     'looking', 'install', 'signin', 'checking', 'done', 'failed-signin' and 'failed-check'. */
@@ -2489,8 +2496,8 @@ function renderAI() {
 
   // The model: one of those the switched-on connections offer.
   const offering = ai.providers.filter((p) => p.enabled && p.models.length);
-  $('ai-model').disabled = !offering.length; // nothing to choose from without a connection
-  $('ai-model-name').textContent = offering.length && ai.model ? ai.model.name : 'No connection';
+  $('ai-model').disabled = !offering.length; // nothing to choose from without a connection, or until its models are listed
+  $('ai-model-name').textContent = ai.model ? ai.model.name : 'No connection';
 
   // Reasoning: how hard the model in use thinks. A level it does not take cannot be chosen;
   // a model that takes none leaves the whole choice out of reach.
@@ -2534,13 +2541,22 @@ opensAiMenu($('ai-model'), (button) => {
   placeAiMenu(button, ...items);
 });
 
-/** Looks over this Mac again and redraws. Until the first look is back, the page shows the
-    providers with their state still unknown. */
+/** Looks over this Mac again and redraws. The first time, the page is drawn at once from
+    what is already known (the connections, with their state still unknown), then again as
+    the tools list their models, and again when the look over this Mac is back. */
 let aiLooking = null;
+let aiListing = null; // the tools being asked for their models, the first time
 async function refreshAI() {
   if (!ai) {
-    ai = await window.api.aiList();
+    ai = await window.api.aiList(true);
     renderAI();
+  }
+  if (ai.quick && !aiListing) {
+    aiListing = window.api.aiList().then((full) => {
+      if (!ai.quick) return; // the look over this Mac came back first
+      ai = full;
+      renderAI();
+    });
   }
   aiLooking ??= window.api.aiStatus().finally(() => (aiLooking = null));
   ai = await aiLooking;

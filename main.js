@@ -283,8 +283,11 @@ const aiIds = (s) => [...ai.list().map((p) => p.id), ...s.endpoints.map((e) => e
 /** The models a connection offers: a tool's own list, or the one model of an endpoint. */
 async function aiModels(s, id) {
   const e = aiEndpoint(s, id);
-  return e ? [{ id: e.model, name: e.modelName || e.model, usual: true, levels: Array.isArray(e.levels) ? e.levels : [] }] : ai.models(id);
+  return e ? endpointModels(e) : ai.models(id);
 }
+const endpointModels = (e) => [{ id: e.model, name: e.modelName || e.model, usual: true, levels: Array.isArray(e.levels) ? e.levels : [] }];
+/** The endpoints as the AI page lists them, without their keys. */
+const aiApis = (s) => s.endpoints.map((e) => ({ id: e.id, api: true, ...ai.place(e.url), url: e.url, model: e.model, hasKey: Boolean(e.key), connected: true, enabled: aiOn(s, e.id), models: endpointModels(e) }));
 /** The reasoning levels on offer for a model: those of ours that it takes. */
 async function aiLevels(s, model) {
   const offered = model ? await aiModels(s, model.provider) : [];
@@ -347,11 +350,22 @@ let aiSeen = null; // the last look over this Mac
 async function aiView() {
   const s = aiSettings();
   const tools = await Promise.all((aiSeen || ai.list()).map(async (p) => ({ ...p, connected: Boolean(s.connections[p.id]), enabled: aiOn(s, p.id), models: await ai.models(p.id) })));
-  const apis = await Promise.all(
-    s.endpoints.map(async (e) => ({ id: e.id, api: true, ...ai.place(e.url), url: e.url, model: e.model, hasKey: Boolean(e.key), connected: true, enabled: aiOn(s, e.id), models: await aiModels(s, e.id) }))
-  );
   const model = await aiModel(s);
-  return { providers: [...tools, ...apis], presets: ai.presets, model, effort: s.effort, levels: await aiLevels(s, model) };
+  return { providers: [...tools, ...aiApis(s)], presets: ai.presets, model, effort: s.effort, levels: await aiLevels(s, model) };
+}
+
+/** The same page, at once, from what is already known: no tool is run to find out more, so
+    there is something to draw while the tools are being asked. A tool's models are there only
+    if they have been asked for before; the model in use is the one last chosen, and until its
+    tool has listed it, it is taken to accept every reasoning level. Marked `quick`. */
+function aiQuickView() {
+  const s = aiSettings();
+  const tools = (aiSeen || ai.list()).map((p) => ({ ...p, connected: Boolean(s.connections[p.id]), enabled: aiOn(s, p.id), models: ai.known(p.id) || [] }));
+  const providers = [...tools, ...aiApis(s)];
+  const model = s.model && aiOn(s, s.model.provider) ? s.model : null;
+  const listed = model && providers.find((p) => p.id === model.provider)?.models.find((m) => m.id === model.id);
+  const levels = listed ? LEVELS.filter((l) => (listed.levels || []).includes(l)) : model ? LEVELS : [];
+  return { providers, presets: ai.presets, model, effort: s.effort, levels, quick: true };
 }
 const asking = new Map(); // request key → the means to call it off
 /** Runs one cancellable piece of work under `key`. Called off, it resolves `{ ok: false, cancelled: true }`. */
@@ -367,7 +381,7 @@ async function cancellable(key, work) {
     asking.delete(key);
   }
 }
-ipcMain.handle('ai:list', () => aiView());
+ipcMain.handle('ai:list', (_e, quick) => (quick ? aiQuickView() : aiView()));
 ipcMain.handle('ai:status', async () => {
   aiSeen = await ai.inspect();
   await Promise.all(aiSeen.map((p) => ai.models(p.id, true)));
