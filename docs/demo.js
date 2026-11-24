@@ -4,7 +4,8 @@
 // storm you can write in. It keeps the app's behaviour for the parts it has (the wallpaper
 // behind a storm that hasn't been started, the count, splitting and merging, tabs, asking
 // about a tweet) and leaves the rest out. Nothing typed here is saved or sent anywhere, and
-// there is no model behind Ask: its replies are written examples, and say so.
+// there is no model behind Ask: its replies are written examples, shown under a model's name as
+// the app shows a reply.
 
 (() => {
   const figure = document.getElementById('demo');
@@ -101,6 +102,7 @@
     'Check the flow':
       'It leads into tweet 2 well: "solved my own problem first" answers the promise straight away.\n\nThe opener promises what the two had in common, and tweets 2 to 4 give one reason each. Saying "three things" up front would tell the reader how long the thread is.',
   };
+  const MODEL = 'gpt-6-sol 5.1'; // the name the written replies are shown under
   const NO_MODEL =
     'This page has no model behind it, so this is where the demo stops. In Storm, your question and the whole storm go to Claude or ChatGPT through your own account, and the reply lands here.';
   const EXAMPLES = new Map([
@@ -110,7 +112,7 @@
   ]);
   function replyFor(s, i, question) {
     const reply = EXAMPLES.get(s.tweets[i])?.[question];
-    return reply ? { reply, model: 'example' } : { reply: NO_MODEL, model: '' };
+    return reply ? { reply, model: MODEL } : { reply: NO_MODEL, model: '' };
   }
   /** A reply already kept on a tweet, as the app keeps them. */
   const keep = (s, i, question, open) => s.notes.set(i, { open, phase: 'done', saved: { question, ...replyFor(s, i, question) } });
