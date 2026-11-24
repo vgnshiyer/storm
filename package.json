@@ -3,7 +3,8 @@
   "productName": "Storm",
   "version": "0.1.0",
   "private": true,
-  "description": "Write and keep tweet storms",
+  "description": "A place for your X threads.",
+  "homepage": "https://vgnshiyer.me/storm/",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
